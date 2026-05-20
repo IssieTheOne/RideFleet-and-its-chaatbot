@@ -137,6 +137,7 @@ final class CoreApiClient {
 			'vehicle_id',
 			'vehicle_name',
 			'extras',
+			'coupon_code',
 		];
 
 		$payload = [];
@@ -224,7 +225,7 @@ final class CoreApiClient {
 			'vehicleId' => absint($payload['vehicle_id'] ?? 0),
 			'routeId' => 0,
 			'extras' => $extras,
-			'couponCode' => '',
+			'couponCode' => sanitize_text_field((string) ($payload['coupon_code'] ?? '')),
 			'customerFirstName' => $name_parts[0] ?? (string) $payload['customer_name'],
 			'customerLastName' => $name_parts[1] ?? '',
 			'customerEmail' => '',

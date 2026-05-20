@@ -88,8 +88,16 @@
 		if (collected.extras && collected.extras.length) {
 			html += '<div class="rfac-route-line"><span>Extras</span><strong>' + escapeHtml(collected.extras.map(function (e) { return e.name || ('#' + e.id); }).join(', ')) + '</strong></div>';
 		}
+		if (collected.coupon_code) {
+			html += '<div class="rfac-route-line"><span>Coupon</span><strong>' + escapeHtml(collected.coupon_code) + ' <em style="opacity:.7;font-weight:500;">(applied at dispatch)</em></strong></div>';
+		}
 		if (quote.final_price) {
 			html += '<div class="rfac-price-line"><span>Verified fare</span><strong>' + escapeHtml(quote.currency || 'USD') + ' ' + Number(quote.final_price).toFixed(2) + '</strong></div>';
+		}
+		if (quote.requires_approval || (quote.service_area && (quote.service_area.pickup_allowed === false || quote.service_area.dropoff_allowed === false))) {
+			var sa = quote.service_area || {};
+			var which = (sa.pickup_allowed === false && sa.dropoff_allowed === false) ? 'both endpoints' : (sa.pickup_allowed === false ? 'pickup' : (sa.dropoff_allowed === false ? 'drop-off' : 'route'));
+			html += '<div class="rfac-warning-line">⚠ ' + escapeHtml(which) + ' outside standard service area — dispatch will approve manually.</div>';
 		}
 		if (booking.id) {
 			html += '<div class="rfac-route-line"><span>Booking ID</span><strong>' + escapeHtml(booking.id) + '</strong></div>';
@@ -491,7 +499,8 @@
 				},
 				body: JSON.stringify({
 					session_id: getSessionId(),
-					message: text
+					message: text,
+					client_locale: (navigator.language || navigator.userLanguage || '').slice(0, 5)
 				})
 			})
 				.then(function (response) {

@@ -26,9 +26,17 @@ final class ConversationEngine {
 		$this->ai = $ai ?: new OpenRouterClient();
 	}
 
-	public function handle(string $session_key, string $message): array {
+	public function handle(string $session_key, string $message, string $client_locale = ''): array {
 		$session = $this->sessions->get_or_create($session_key);
 		$message = trim(wp_strip_all_tags($message));
+
+		if ('' === (string) ($session['collected_data']['language'] ?? '') && '' !== $client_locale) {
+			$seed = strtolower(substr($client_locale, 0, 2));
+			if (in_array($seed, ['en', 'fr', 'nl'], true)) {
+				$session['collected_data']['language'] = $seed;
+			}
+		}
+
 		$turn = $this->classify_turn($message, $session);
 		$turn = $this->state_scoped_turn($turn, (string) ($session['state'] ?? 'greeting'));
 		$this->current_turn = $turn;
@@ -133,6 +141,18 @@ final class ConversationEngine {
 			$session['last_quote'] = [];
 			$response = $this->reply($session, $this->say($session, 'cancelled'));
 			return $this->commit_response($response);
+		}
+
+		$coupon = $this->detect_coupon_code($message);
+		if ('' !== $coupon) {
+			$data = $session['collected_data'];
+			$data['coupon_code'] = $coupon;
+			$session['collected_data'] = $data;
+			if (!empty($session['last_quote']) && empty($session['last_quote']['coupon'])) {
+				$last_quote = $session['last_quote'];
+				$last_quote['coupon'] = ['code' => $coupon, 'status' => 'pending_validation'];
+				$session['last_quote'] = $last_quote;
+			}
 		}
 
 		$interruption = $this->handle_interruption($session, $message);
@@ -495,12 +515,24 @@ final class ConversationEngine {
 			return $this->reply($session, __('I could not verify a valid fare for that trip. Please contact dispatch directly.', 'ridefleet-ai-chatbot'));
 		}
 
+		$requires_approval = !empty($quote['requires_approval']) || !empty($quote['approval_required']);
+		$service_status = is_array($quote['service_area_status'] ?? null) ? $quote['service_area_status'] : [];
+		$pickup_allowed = !isset($service_status['pickup_allowed']) || !empty($service_status['pickup_allowed']);
+		$dropoff_allowed = !isset($service_status['dropoff_allowed']) || !empty($service_status['dropoff_allowed']);
+
 		$session['last_quote'] = [
 			'final_price' => round($price, 2),
 			'base_price' => round((float) ($quote['base_price'] ?? $price), 2),
 			'currency' => $currency,
 			'zone_name' => $zone,
 			'addons' => $quote['addons'] ?? [],
+			'requires_approval' => $requires_approval,
+			'service_area' => [
+				'status' => sanitize_key((string) ($service_status['status'] ?? ($requires_approval ? 'approval_required' : 'inside'))),
+				'pickup_allowed' => $pickup_allowed,
+				'dropoff_allowed' => $dropoff_allowed,
+				'message' => sanitize_text_field((string) ($quote['approval_message'] ?? $service_status['message'] ?? '')),
+			],
 			'raw' => $quote,
 		];
 		$session['state'] = $continue_booking ? 'capture_name' : 'confirm_price';
@@ -510,7 +542,40 @@ final class ConversationEngine {
 			return $this->reply($session, $this->quote_updated_message($session, $currency, $price, $zone_text));
 		}
 
-		return $this->reply($session, $this->quote_message($session, (string) $data['pickup_address'], (string) $data['dropoff_address'], $currency, $price, $zone_text));
+		$message = $this->quote_message($session, (string) $data['pickup_address'], (string) $data['dropoff_address'], $currency, $price, $zone_text);
+		if ($requires_approval || !$pickup_allowed || !$dropoff_allowed) {
+			$message .= "\n\n" . $this->service_area_warning($session, $pickup_allowed, $dropoff_allowed);
+		}
+
+		return $this->reply($session, $message);
+	}
+
+	private function service_area_warning(array $session, bool $pickup_allowed, bool $dropoff_allowed): string {
+		$lang = (string) ($session['collected_data']['language'] ?? 'en');
+		$which = '';
+		if (!$pickup_allowed && !$dropoff_allowed) {
+			$which = 'both';
+		} elseif (!$pickup_allowed) {
+			$which = 'pickup';
+		} elseif (!$dropoff_allowed) {
+			$which = 'dropoff';
+		}
+
+		if ('nl' === $lang) {
+			return __('⚠️ Let op: deze rit valt deels buiten ons standaard serviceaanbod en moet door dispatch worden goedgekeurd voor de boeking definitief is.', 'ridefleet-ai-chatbot');
+		}
+		if ('fr' === $lang) {
+			return __('⚠️ Note : cette course sort de notre zone de service standard. Le dispatch doit l\'approuver manuellement avant la confirmation définitive.', 'ridefleet-ai-chatbot');
+		}
+		switch ($which) {
+			case 'pickup':
+				return __('⚠️ Heads up: the pickup is outside our standard service area, so dispatch will manually approve this booking before it\'s confirmed.', 'ridefleet-ai-chatbot');
+			case 'dropoff':
+				return __('⚠️ Heads up: the drop-off is outside our standard service area, so dispatch will manually approve this booking before it\'s confirmed.', 'ridefleet-ai-chatbot');
+			case 'both':
+				return __('⚠️ Heads up: both the pickup and drop-off are outside our standard service area, so dispatch will manually approve this booking before it\'s confirmed.', 'ridefleet-ai-chatbot');
+		}
+		return __('⚠️ Heads up: this route needs dispatch approval before it\'s confirmed.', 'ridefleet-ai-chatbot');
 	}
 
 	private function submit_booking(array $session): array {
@@ -539,6 +604,10 @@ final class ConversationEngine {
 			'vehicle_name' => (string) ($data['vehicle_name'] ?? ''),
 			'extras' => is_array($data['extras'] ?? null) ? $data['extras'] : [],
 		];
+
+		if (!empty($data['coupon_code'])) {
+			$payload['coupon_code'] = sanitize_text_field((string) $data['coupon_code']);
+		}
 
 		$result = $this->core->submit_core_booking($payload);
 		$this->sessions->log_booking((int) $session['id'], $payload, $result);
@@ -1120,6 +1189,13 @@ final class ConversationEngine {
 
 	private function is_negative(string $message): bool {
 		return 1 === preg_match('/\b(no|nope|cancel|change|different)\b/i', $message);
+	}
+
+	private function detect_coupon_code(string $message): string {
+		if (preg_match('/\b(?:coupon|promo|promo\s*code|discount\s*code|code|voucher|gutschein|kortingscode|kortingsbon|bon\s*de\s*reduction|code\s*promo)\s*[:\-]?\s*["\']?([A-Z0-9][A-Z0-9_\-]{2,19})["\']?/iu', $message, $matches)) {
+			return strtoupper(sanitize_text_field($matches[1]));
+		}
+		return '';
 	}
 
 	private function is_reset(string $message): bool {
@@ -1858,6 +1934,9 @@ final class ConversationEngine {
 				'currency' => $session['last_quote']['currency'] ?? null,
 				'zone_name' => $session['last_quote']['zone_name'] ?? null,
 				'addons' => $session['last_quote']['addons'] ?? [],
+				'requires_approval' => !empty($session['last_quote']['requires_approval']),
+				'service_area' => $session['last_quote']['service_area'] ?? null,
+				'coupon' => $session['last_quote']['coupon'] ?? null,
 			],
 			'booking' => [
 				'id' => $session['collected_data']['last_booking_id'] ?? null,

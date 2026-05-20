@@ -60,13 +60,21 @@ final class Routes {
 
 		$session_key = sanitize_key((string) ($request->get_param('session_id') ?: wp_generate_uuid4()));
 		$message = sanitize_textarea_field((string) $request->get_param('message'));
+		$client_locale = sanitize_text_field((string) $request->get_param('client_locale'));
+
+		if ('' === $client_locale) {
+			$header = (string) $request->get_header('accept-language');
+			if ('' !== $header) {
+				$client_locale = sanitize_text_field(strtok($header, ','));
+			}
+		}
 
 		if ('' === trim($message)) {
 			return new WP_REST_Response(['message' => __('Message is required.', 'ridefleet-ai-chatbot')], 400);
 		}
 
 		$engine = new ConversationEngine();
-		return new WP_REST_Response($engine->handle($session_key, $message));
+		return new WP_REST_Response($engine->handle($session_key, $message, $client_locale));
 	}
 
 	public static function public_settings(): WP_REST_Response {

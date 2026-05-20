@@ -438,6 +438,18 @@
 	font-weight: 800;
 }
 
+.rfac-warning-line {
+	margin-top: 4px;
+	padding: 8px 10px;
+	background: #fffbeb;
+	border: 1px solid #fcd34d;
+	border-radius: 8px;
+	color: #92400e;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
 .rfac-action-row {
 	display: grid;
 	grid-template-columns: 1fr 1fr;

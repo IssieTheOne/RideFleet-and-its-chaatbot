@@ -95,12 +95,26 @@ final class Admin {
 		$changes = $wpdb->prefix . 'rfac_change_requests';
 
 		$today = current_time('Y-m-d');
+		$week_ago = gmdate('Y-m-d H:i:s', time() - (7 * DAY_IN_SECONDS));
 
 		return [
 			'total_sessions' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$sessions}"),
 			'sessions_today' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$sessions} WHERE DATE(created_at) = %s", $today)),
+			'sessions_week' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$sessions} WHERE created_at >= %s", $week_ago)),
 			'total_bookings' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings} WHERE status = 'confirmed'"),
+			'bookings_week' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$bookings} WHERE status = 'confirmed' AND created_at >= %s", $week_ago)),
 			'pending_changes' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$changes} WHERE status = 'pending'"),
+		];
+	}
+
+	private static function recent_activity(int $limit = 5): array {
+		global $wpdb;
+		$sessions = $wpdb->prefix . 'rfac_chat_sessions';
+		$bookings = $wpdb->prefix . 'rfac_booking_events';
+
+		return [
+			'sessions' => $wpdb->get_results($wpdb->prepare("SELECT id, session_key, state, updated_at, collected_data FROM {$sessions} ORDER BY updated_at DESC LIMIT %d", $limit), ARRAY_A) ?: [],
+			'bookings' => $wpdb->get_results($wpdb->prepare("SELECT core_booking_id, customer_name, pickup_address, dropoff_address, verified_price, currency, created_at, status FROM {$bookings} ORDER BY id DESC LIMIT %d", $limit), ARRAY_A) ?: [],
 		];
 	}
 
@@ -245,6 +259,7 @@ final class Admin {
 		$options = Options::all();
 		$theme = is_array($options['chatbot_ui_theme'] ?? null) ? $options['chatbot_ui_theme'] : [];
 		$stats = self::stats();
+		$activity = self::recent_activity(5);
 		?>
 		<div class="wrap rfac-admin">
 			<h1><?php esc_html_e('AI Chatbot Connector', 'ridefleet-ai-chatbot'); ?></h1>
@@ -252,22 +267,88 @@ final class Admin {
 
 			<div class="rfac-stats">
 				<div class="rfac-stat">
-					<span class="rfac-stat-label"><?php esc_html_e('Total sessions', 'ridefleet-ai-chatbot'); ?></span>
-					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['total_sessions'])); ?></span>
-				</div>
-				<div class="rfac-stat">
 					<span class="rfac-stat-label"><?php esc_html_e('Sessions today', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['sessions_today'])); ?></span>
+					<small style="color:#64748b;font-size:11px;font-weight:600;"><?php printf(esc_html__('%s this week', 'ridefleet-ai-chatbot'), '<strong>' . esc_html(number_format_i18n($stats['sessions_week'])) . '</strong>'); ?></small>
+				</div>
+				<div class="rfac-stat">
+					<span class="rfac-stat-label"><?php esc_html_e('All-time sessions', 'ridefleet-ai-chatbot'); ?></span>
+					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['total_sessions'])); ?></span>
 				</div>
 				<div class="rfac-stat">
 					<span class="rfac-stat-label"><?php esc_html_e('Confirmed bookings', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['total_bookings'])); ?></span>
+					<small style="color:#64748b;font-size:11px;font-weight:600;"><?php printf(esc_html__('%s this week', 'ridefleet-ai-chatbot'), '<strong>' . esc_html(number_format_i18n($stats['bookings_week'])) . '</strong>'); ?></small>
 				</div>
 				<div class="rfac-stat <?php echo $stats['pending_changes'] > 0 ? 'rfac-stat-pending' : ''; ?>">
 					<span class="rfac-stat-label"><?php esc_html_e('Pending requests', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['pending_changes'])); ?></span>
+					<?php if ($stats['pending_changes'] > 0) : ?>
+						<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-changes')); ?>" style="font-size:11px;font-weight:600;color:#b45309;text-decoration:none;"><?php esc_html_e('Review →', 'ridefleet-ai-chatbot'); ?></a>
+					<?php endif; ?>
 				</div>
 			</div>
+
+			<?php if (!empty($activity['sessions']) || !empty($activity['bookings'])) : ?>
+			<section class="rfac-panel rfac-panel-wide" style="margin-bottom:18px;">
+				<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+					<div>
+						<h2 style="margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;">
+							<?php esc_html_e('Recent conversations', 'ridefleet-ai-chatbot'); ?>
+							<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-history')); ?>" style="font-size:12px;font-weight:600;text-decoration:none;"><?php esc_html_e('View all →', 'ridefleet-ai-chatbot'); ?></a>
+						</h2>
+						<div style="display:grid;gap:8px;">
+							<?php foreach ($activity['sessions'] as $s) :
+								$coll = json_decode((string) ($s['collected_data'] ?? '{}'), true);
+								$coll = is_array($coll) ? $coll : [];
+								$pickup = (string) ($coll['pickup_address'] ?? '');
+								$dropoff = (string) ($coll['dropoff_address'] ?? '');
+								$cust = (string) ($coll['customer_name'] ?? '');
+								?>
+								<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-history&session_id=' . absint($s['id']))); ?>" style="display:block;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;text-decoration:none;color:inherit;background:#fcfcfd;">
+									<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+										<span class="rfac-state-pill rfac-state-<?php echo esc_attr(sanitize_key((string) $s['state'])); ?>"><?php echo esc_html(str_replace('_', ' ', (string) $s['state'])); ?></span>
+										<time style="font-size:11px;color:#94a3b8;"><?php echo esc_html(human_time_diff(strtotime((string) $s['updated_at']), current_time('U'))); ?> <?php esc_html_e('ago', 'ridefleet-ai-chatbot'); ?></time>
+									</div>
+									<?php if ($cust) : ?><div style="font-weight:700;font-size:13px;margin-bottom:2px;"><?php echo esc_html($cust); ?></div><?php endif; ?>
+									<?php if ($pickup || $dropoff) : ?>
+										<div style="font-size:12px;color:#64748b;line-height:1.4;">
+											📍 <?php echo esc_html($pickup ?: '—'); ?><br>
+											🏁 <?php echo esc_html($dropoff ?: '—'); ?>
+										</div>
+									<?php endif; ?>
+								</a>
+							<?php endforeach; ?>
+						</div>
+					</div>
+
+					<div>
+						<h2 style="margin:0 0 12px;"><?php esc_html_e('Recent bookings', 'ridefleet-ai-chatbot'); ?></h2>
+						<?php if ($activity['bookings']) : ?>
+							<div style="display:grid;gap:8px;">
+								<?php foreach ($activity['bookings'] as $b) : ?>
+									<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fcfcfd;">
+										<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+											<strong style="font-size:13px;"><?php echo esc_html((string) $b['customer_name'] ?: '—'); ?></strong>
+											<span style="font-size:14px;font-weight:800;color:#0f766e;"><?php echo esc_html((string) ($b['currency'] ?? 'USD')); ?> <?php echo esc_html(number_format((float) ($b['verified_price'] ?? 0), 2)); ?></span>
+										</div>
+										<div style="font-size:12px;color:#64748b;line-height:1.4;">
+											📍 <?php echo esc_html((string) ($b['pickup_address'] ?? '—')); ?><br>
+											🏁 <?php echo esc_html((string) ($b['dropoff_address'] ?? '—')); ?>
+										</div>
+										<?php if ($b['core_booking_id']) : ?>
+											<div style="font-size:11px;color:#94a3b8;margin-top:4px;font-family:monospace;">#<?php echo esc_html((string) $b['core_booking_id']); ?></div>
+										<?php endif; ?>
+									</div>
+								<?php endforeach; ?>
+							</div>
+						<?php else : ?>
+							<p style="color:#64748b;font-size:13px;"><?php esc_html_e('No bookings yet.', 'ridefleet-ai-chatbot'); ?></p>
+						<?php endif; ?>
+					</div>
+				</div>
+			</section>
+			<?php endif; ?>
 
 			<form method="post" class="rfac-shell">
 				<?php wp_nonce_field('rfac_save_settings', 'rfac_settings_nonce'); ?>

@@ -12,6 +12,8 @@ if (!defined('ABSPATH')) {
 }
 
 final class ChatHistoryPage {
+	private const PAGE_SIZE = 25;
+
 	public static function render(): void {
 		if (!current_user_can('manage_options')) {
 			wp_die(esc_html__('You are not allowed to view chatbot conversations.', 'ridefleet-ai-chatbot'));
@@ -20,111 +22,216 @@ final class ChatHistoryPage {
 		global $wpdb;
 		$sessions_table = $wpdb->prefix . 'rfac_chat_sessions';
 		$messages_table = $wpdb->prefix . 'rfac_chat_messages';
+
 		$session_id = absint($_GET['session_id'] ?? 0);
 		$search = sanitize_text_field((string) ($_GET['s'] ?? ''));
+		$state_filter = sanitize_key((string) ($_GET['state_filter'] ?? ''));
+		$lang_filter = sanitize_key((string) ($_GET['lang_filter'] ?? ''));
+		$paged = max(1, absint($_GET['paged'] ?? 1));
+		$offset = ($paged - 1) * self::PAGE_SIZE;
+
+		$where = [];
+		$args = [];
 
 		if ('' !== $search) {
 			$like = '%' . $wpdb->esc_like($search) . '%';
-			$sessions = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT s.* FROM {$sessions_table} s
-					 LEFT JOIN {$messages_table} m ON m.session_id = s.id
-					 WHERE s.session_key LIKE %s OR m.message LIKE %s
-					 GROUP BY s.id ORDER BY s.updated_at DESC LIMIT 100",
-					$like,
-					$like
-				),
-				ARRAY_A
-			);
-		} else {
-			$sessions = $wpdb->get_results("SELECT * FROM {$sessions_table} ORDER BY updated_at DESC LIMIT 50", ARRAY_A);
+			$where[] = '(s.session_key LIKE %s OR EXISTS (SELECT 1 FROM ' . $messages_table . ' m WHERE m.session_id = s.id AND m.message LIKE %s))';
+			$args[] = $like;
+			$args[] = $like;
 		}
 
+		if ('' !== $state_filter && 'all' !== $state_filter) {
+			$where[] = 's.state = %s';
+			$args[] = $state_filter;
+		}
+
+		if ('' !== $lang_filter && 'all' !== $lang_filter) {
+			$where[] = "EXISTS (SELECT 1 FROM {$messages_table} m WHERE m.session_id = s.id AND m.detected_language = %s)";
+			$args[] = $lang_filter;
+		}
+
+		$where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+		$count_sql = "SELECT COUNT(*) FROM {$sessions_table} s {$where_sql}";
+		$list_sql = "SELECT s.* FROM {$sessions_table} s {$where_sql} ORDER BY s.updated_at DESC LIMIT %d OFFSET %d";
+
+		$total = $args
+			? (int) $wpdb->get_var($wpdb->prepare($count_sql, ...$args))
+			: (int) $wpdb->get_var($count_sql);
+
+		$list_args = array_merge($args, [self::PAGE_SIZE, $offset]);
+		$sessions = $wpdb->get_results($wpdb->prepare($list_sql, ...$list_args), ARRAY_A);
+
+		$state_counts = $wpdb->get_results("SELECT state, COUNT(*) AS c FROM {$sessions_table} GROUP BY state ORDER BY c DESC", ARRAY_A);
+
 		$messages = [];
+		$session_row = null;
 		if ($session_id) {
 			$messages = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$messages_table} WHERE session_id = %d ORDER BY id ASC", $session_id), ARRAY_A);
+			$session_row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$sessions_table} WHERE id = %d", $session_id), ARRAY_A);
 		}
+
+		$base_url = admin_url('admin.php?page=ridefleet-ai-chatbot-history');
+		$total_pages = max(1, (int) ceil($total / self::PAGE_SIZE));
 		?>
 		<div class="wrap rfac-admin">
 			<h1>
 				<?php esc_html_e('Chatbot Conversations', 'ridefleet-ai-chatbot'); ?>
+				<span class="title-count theme-count"><?php echo esc_html(number_format_i18n($total)); ?></span>
 				<a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=rfac_export_chat_sessions'), 'rfac_export_chat_sessions')); ?>" class="page-title-action"><?php esc_html_e('Export CSV', 'ridefleet-ai-chatbot'); ?></a>
 			</h1>
+
 			<?php if (!empty($_GET['deleted'])) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e('Conversation deleted.', 'ridefleet-ai-chatbot'); ?></p></div>
 			<?php endif; ?>
+
+			<section class="rfac-panel rfac-panel-wide" style="margin-top:18px;">
+				<form method="get" class="rfac-filters">
+					<input type="hidden" name="page" value="ridefleet-ai-chatbot-history">
+					<div class="rfac-filter-row">
+						<input type="search" name="s" value="<?php echo esc_attr($search); ?>" placeholder="<?php esc_attr_e('Search session key or message text…', 'ridefleet-ai-chatbot'); ?>" class="rfac-search">
+						<select name="lang_filter">
+							<option value=""><?php esc_html_e('All languages', 'ridefleet-ai-chatbot'); ?></option>
+							<?php foreach (['en' => 'English', 'fr' => 'Français', 'nl' => 'Nederlands'] as $code => $label) : ?>
+								<option value="<?php echo esc_attr($code); ?>" <?php selected($lang_filter, $code); ?>><?php echo esc_html($label); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<button type="submit" class="button button-primary"><?php esc_html_e('Filter', 'ridefleet-ai-chatbot'); ?></button>
+						<?php if ('' !== $search || '' !== $state_filter || '' !== $lang_filter) : ?>
+							<a href="<?php echo esc_url($base_url); ?>" class="button"><?php esc_html_e('Reset', 'ridefleet-ai-chatbot'); ?></a>
+						<?php endif; ?>
+					</div>
+
+					<div class="rfac-state-chips">
+						<a href="<?php echo esc_url(add_query_arg(['state_filter' => 'all', 's' => $search, 'lang_filter' => $lang_filter], $base_url)); ?>"
+							class="rfac-chip <?php echo '' === $state_filter || 'all' === $state_filter ? 'is-active' : ''; ?>">
+							<?php esc_html_e('All', 'ridefleet-ai-chatbot'); ?>
+						</a>
+						<?php foreach ((array) $state_counts as $sc) : ?>
+							<a href="<?php echo esc_url(add_query_arg(['state_filter' => $sc['state'], 's' => $search, 'lang_filter' => $lang_filter], $base_url)); ?>"
+								class="rfac-chip <?php echo $state_filter === $sc['state'] ? 'is-active' : ''; ?>">
+								<?php echo esc_html(str_replace('_', ' ', (string) $sc['state'])); ?>
+								<span class="rfac-chip-count"><?php echo esc_html(number_format_i18n((int) $sc['c'])); ?></span>
+							</a>
+						<?php endforeach; ?>
+					</div>
+				</form>
+			</section>
+
 			<div class="rfac-history-layout">
 				<section class="rfac-panel">
-					<h2><?php esc_html_e('Recent Sessions', 'ridefleet-ai-chatbot'); ?></h2>
-					<div class="rfac-history-toolbar">
-						<form method="get">
-							<input type="hidden" name="page" value="ridefleet-ai-chatbot-history">
-							<input type="search" name="s" value="<?php echo esc_attr($search); ?>" placeholder="<?php esc_attr_e('Search session key or message...', 'ridefleet-ai-chatbot'); ?>">
-							<button type="submit" class="button"><?php esc_html_e('Search', 'ridefleet-ai-chatbot'); ?></button>
-							<?php if ('' !== $search) : ?>
-								<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-history')); ?>" class="button"><?php esc_html_e('Clear', 'ridefleet-ai-chatbot'); ?></a>
-							<?php endif; ?>
-						</form>
-					</div>
-					<table class="widefat striped">
-						<thead>
-							<tr>
-								<th><?php esc_html_e('Session', 'ridefleet-ai-chatbot'); ?></th>
-								<th><?php esc_html_e('State', 'ridefleet-ai-chatbot'); ?></th>
-								<th><?php esc_html_e('Updated', 'ridefleet-ai-chatbot'); ?></th>
-								<th><?php esc_html_e('Actions', 'ridefleet-ai-chatbot'); ?></th>
-							</tr>
-						</thead>
-						<tbody>
-						<?php foreach ((array) $sessions as $session) : ?>
-							<tr>
-								<td><a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-history&session_id=' . absint($session['id']))); ?>"><?php echo esc_html(substr((string) $session['session_key'], 0, 18)); ?></a></td>
-								<td><span class="rfac-status-pill"><?php echo esc_html(str_replace('_', ' ', (string) $session['state'])); ?></span></td>
-								<td><?php echo esc_html((string) $session['updated_at']); ?></td>
-								<td>
-									<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-										<input type="hidden" name="action" value="rfac_delete_chat_session">
-										<input type="hidden" name="session_id" value="<?php echo esc_attr((string) $session['id']); ?>">
-										<?php wp_nonce_field('rfac_delete_chat_session_' . (int) $session['id']); ?>
-										<button class="button button-small" type="submit" onclick="return confirm('<?php echo esc_js(__('Delete this conversation?', 'ridefleet-ai-chatbot')); ?>');"><?php esc_html_e('Delete', 'ridefleet-ai-chatbot'); ?></button>
-									</form>
-								</td>
-							</tr>
+					<h2 style="margin-bottom:12px;"><?php esc_html_e('Sessions', 'ridefleet-ai-chatbot'); ?></h2>
+
+					<div class="rfac-session-list">
+						<?php foreach ((array) $sessions as $session) :
+							$collected = json_decode((string) ($session['collected_data'] ?? '{}'), true);
+							$collected = is_array($collected) ? $collected : [];
+							$lang = (string) ($collected['language'] ?? '');
+							$pickup = (string) ($collected['pickup_address'] ?? '');
+							$dropoff = (string) ($collected['dropoff_address'] ?? '');
+							$customer = (string) ($collected['customer_name'] ?? '');
+							$is_active = $session_id === (int) $session['id'];
+							?>
+							<a class="rfac-session-card <?php echo $is_active ? 'is-active' : ''; ?>"
+								href="<?php echo esc_url(add_query_arg(['session_id' => absint($session['id'])], $base_url)); ?>">
+								<div class="rfac-session-head">
+									<span class="rfac-state-pill rfac-state-<?php echo esc_attr(sanitize_key((string) $session['state'])); ?>">
+										<?php echo esc_html(str_replace('_', ' ', (string) $session['state'])); ?>
+									</span>
+									<?php if ($lang) : ?>
+										<span class="rfac-lang-pill rfac-lang-<?php echo esc_attr($lang); ?>"><?php echo esc_html(strtoupper($lang)); ?></span>
+									<?php endif; ?>
+									<time class="rfac-session-time"><?php echo esc_html(human_time_diff(strtotime((string) $session['updated_at']), current_time('U'))); ?> <?php esc_html_e('ago', 'ridefleet-ai-chatbot'); ?></time>
+								</div>
+								<?php if ($customer) : ?>
+									<div class="rfac-session-customer"><?php echo esc_html($customer); ?></div>
+								<?php endif; ?>
+								<?php if ($pickup || $dropoff) : ?>
+									<div class="rfac-session-route">
+										<span>📍 <?php echo esc_html($pickup ?: '—'); ?></span>
+										<span>🏁 <?php echo esc_html($dropoff ?: '—'); ?></span>
+									</div>
+								<?php endif; ?>
+								<div class="rfac-session-key"><?php echo esc_html(substr((string) $session['session_key'], 0, 24)); ?>…</div>
+							</a>
 						<?php endforeach; ?>
 						<?php if (!$sessions) : ?>
-							<tr><td colspan="4"><?php esc_html_e('No conversations found.', 'ridefleet-ai-chatbot'); ?></td></tr>
+							<p style="padding:24px; text-align:center; color:#64748b;"><?php esc_html_e('No conversations match the current filter.', 'ridefleet-ai-chatbot'); ?></p>
 						<?php endif; ?>
-						</tbody>
-					</table>
+					</div>
+
+					<?php if ($total_pages > 1) : ?>
+						<div class="rfac-pagination">
+							<?php
+							$base_args = ['s' => $search, 'state_filter' => $state_filter, 'lang_filter' => $lang_filter];
+							if ($paged > 1) {
+								echo '<a class="button button-small" href="' . esc_url(add_query_arg(array_merge($base_args, ['paged' => $paged - 1]), $base_url)) . '">' . esc_html__('« Previous', 'ridefleet-ai-chatbot') . '</a>';
+							}
+							echo ' <span style="margin:0 10px;">' . sprintf(esc_html__('Page %1$d of %2$d', 'ridefleet-ai-chatbot'), $paged, $total_pages) . '</span> ';
+							if ($paged < $total_pages) {
+								echo '<a class="button button-small" href="' . esc_url(add_query_arg(array_merge($base_args, ['paged' => $paged + 1]), $base_url)) . '">' . esc_html__('Next »', 'ridefleet-ai-chatbot') . '</a>';
+							}
+							?>
+						</div>
+					<?php endif; ?>
 				</section>
 
 				<section class="rfac-panel">
-					<h2><?php esc_html_e('Transcript', 'ridefleet-ai-chatbot'); ?></h2>
+					<?php if ($session_row) : ?>
+						<div class="rfac-transcript-head">
+							<div>
+								<h2 style="margin:0 0 4px;"><?php esc_html_e('Transcript', 'ridefleet-ai-chatbot'); ?></h2>
+								<div style="color:#64748b;font-size:12px;">
+									<?php echo esc_html(substr((string) $session_row['session_key'], 0, 30)); ?>
+									· <?php echo esc_html(count($messages)); ?> <?php esc_html_e('messages', 'ridefleet-ai-chatbot'); ?>
+									· <?php echo esc_html((string) $session_row['updated_at']); ?>
+								</div>
+							</div>
+							<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+								<input type="hidden" name="action" value="rfac_delete_chat_session">
+								<input type="hidden" name="session_id" value="<?php echo esc_attr((string) $session_row['id']); ?>">
+								<?php wp_nonce_field('rfac_delete_chat_session_' . (int) $session_row['id']); ?>
+								<button class="button button-link-delete" type="submit" onclick="return confirm('<?php echo esc_js(__('Delete this conversation? This cannot be undone.', 'ridefleet-ai-chatbot')); ?>');">
+									<?php esc_html_e('Delete', 'ridefleet-ai-chatbot'); ?>
+								</button>
+							</form>
+						</div>
+					<?php else : ?>
+						<h2 style="margin-bottom:12px;"><?php esc_html_e('Transcript', 'ridefleet-ai-chatbot'); ?></h2>
+					<?php endif; ?>
+
 					<div class="rfac-transcript">
-					<?php foreach ((array) $messages as $message) : ?>
-						<div class="rfac-transcript-message rfac-transcript-<?php echo esc_attr((string) $message['role']); ?>">
-							<strong><?php echo esc_html(ucfirst((string) $message['role'])); ?></strong>
-							<p><?php echo esc_html((string) $message['message']); ?></p>
-							<?php if (!empty($message['admin_summary']) && $message['admin_summary'] !== $message['message']) : ?>
-								<em><?php echo esc_html__('Admin summary:', 'ridefleet-ai-chatbot'); ?> <?php echo esc_html((string) $message['admin_summary']); ?></em>
-							<?php endif; ?>
-							<?php if (!empty($message['intent']) || !empty($message['detected_language'])) : ?>
-								<small>
-									<?php echo esc_html__('Intent:', 'ridefleet-ai-chatbot'); ?> <?php echo esc_html((string) ($message['intent'] ?: 'n/a')); ?>
-									&middot;
-									<?php echo esc_html__('Language:', 'ridefleet-ai-chatbot'); ?> <?php echo esc_html(strtoupper((string) ($message['detected_language'] ?: 'n/a'))); ?>
-								</small>
-							<?php endif; ?>
-							<?php if (!empty($message['extracted_fields']) && '[]' !== (string) $message['extracted_fields']) : ?>
-								<small><?php echo esc_html__('Fields:', 'ridefleet-ai-chatbot'); ?> <code><?php echo esc_html((string) $message['extracted_fields']); ?></code></small>
-							<?php endif; ?>
-							<time><?php echo esc_html((string) $message['created_at']); ?></time>
+					<?php foreach ((array) $messages as $message) :
+						$role = (string) $message['role'];
+						$intent = (string) ($message['intent'] ?? '');
+						$lang = (string) ($message['detected_language'] ?? '');
+						?>
+						<div class="rfac-bubble-row rfac-bubble-row-<?php echo esc_attr($role); ?>">
+							<div class="rfac-bubble rfac-bubble-<?php echo esc_attr($role); ?>">
+								<div class="rfac-bubble-text"><?php echo nl2br(esc_html((string) $message['message'])); ?></div>
+								<div class="rfac-bubble-meta">
+									<time><?php echo esc_html(mysql2date('M j · H:i', (string) $message['created_at'])); ?></time>
+									<?php if ($intent && 'unknown' !== $intent) : ?>
+										<span class="rfac-meta-pill rfac-intent-pill"><?php echo esc_html(str_replace('_', ' ', $intent)); ?></span>
+									<?php endif; ?>
+									<?php if ($lang) : ?>
+										<span class="rfac-meta-pill rfac-lang-pill rfac-lang-<?php echo esc_attr($lang); ?>"><?php echo esc_html(strtoupper($lang)); ?></span>
+									<?php endif; ?>
+								</div>
+								<?php if (!empty($message['extracted_fields']) && '[]' !== (string) $message['extracted_fields']) :
+									$fields = json_decode((string) $message['extracted_fields'], true);
+									if (is_array($fields) && $fields) : ?>
+									<details class="rfac-bubble-fields">
+										<summary><?php esc_html_e('Extracted fields', 'ridefleet-ai-chatbot'); ?></summary>
+										<pre><?php echo esc_html(wp_json_encode($fields, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)); ?></pre>
+									</details>
+								<?php endif; endif; ?>
+							</div>
 						</div>
 					<?php endforeach; ?>
 					<?php if (!$session_id) : ?>
-						<p><?php esc_html_e('Select a session to inspect the transcript.', 'ridefleet-ai-chatbot'); ?></p>
+						<p style="padding:36px; text-align:center; color:#64748b;"><?php esc_html_e('← Select a session to inspect the transcript.', 'ridefleet-ai-chatbot'); ?></p>
 					<?php elseif (!$messages) : ?>
-						<p><?php esc_html_e('No messages found for this session.', 'ridefleet-ai-chatbot'); ?></p>
+						<p style="padding:24px; text-align:center; color:#64748b;"><?php esc_html_e('No messages in this session yet.', 'ridefleet-ai-chatbot'); ?></p>
 					<?php endif; ?>
 					</div>
 				</section>
@@ -171,7 +278,7 @@ final class ChatHistoryPage {
 		header('Content-Disposition: attachment; filename="ridefleet-chatbot-history-' . gmdate('Y-m-d-His') . '.csv"');
 
 		$out = fopen('php://output', 'w');
-		fputs($out, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+		fputs($out, "\xEF\xBB\xBF");
 		fputcsv($out, ['Session ID', 'Session Key', 'State', 'Session Started', 'Session Updated', 'Role', 'Message', 'Intent', 'Language', 'Message At']);
 		foreach ((array) $rows as $row) {
 			fputcsv($out, [
