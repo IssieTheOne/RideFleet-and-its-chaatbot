@@ -1,0 +1,72 @@
+.rfb-core-rules-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 18px;
+	max-width: 1280px;
+}
+
+.rfb-flat-rate-table {
+	display: grid;
+	gap: 8px;
+}
+
+.rfb-flat-rate-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 12px 0 16px;
+}
+
+.rfb-flat-rate-head,
+.rfb-flat-rate-row {
+	display: grid;
+	grid-template-columns: 1.1fr 1.1fr .8fr 1.6fr .7fr;
+	gap: 10px;
+	align-items: start;
+}
+
+.rfb-flat-rate-head {
+	color: var(--rfb-muted);
+	font-size: 11px;
+	font-weight: 900;
+	text-transform: uppercase;
+	letter-spacing: .08em;
+}
+
+.rfb-flat-rate-row {
+	padding: 12px;
+	border: 1px solid #d9e4ef;
+	border-radius: 14px;
+	background: #fbfcfd;
+}
+
+.rfb-flat-rate-row label,
+.rfb-zone-tools {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+}
+
+.rfb-flat-rate-row label span,
+.rfb-step-kicker {
+	color: #0f766e;
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+}
+
+.rfb-zone-tools textarea {
+	min-height: 86px;
+}
+
+@media (max-width: 1100px) {
+	.rfb-core-rules-grid,
+	.rfb-flat-rate-head,
+	.rfb-flat-rate-row {
+		grid-template-columns: 1fr;
+	}
+
+	.rfb-flat-rate-head {
+		display: none;
+	}
+}

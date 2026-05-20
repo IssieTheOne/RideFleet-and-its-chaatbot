@@ -1,0 +1,93 @@
+/* .rfb-hero and .rfb-hero-actions live in admin.css (global) — used on every page */
+
+.rfb-panel canvas {
+	max-width: 100%;
+	width: 100% !important;
+	height: 260px !important;
+	margin-top: 0;
+}
+
+.rfb-charts-grid .rfb-panel {
+	min-height: 350px;
+	overflow: hidden;
+}
+
+.rfb-ops-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+	gap: 16px;
+	margin: 18px 0;
+}
+
+/* rfb-mini-stats lives in admin.css (global) — used on calendar, dashboard, and others */
+
+.rfb-progress {
+	height: 10px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #ecf1f4;
+	margin-bottom: 12px;
+}
+
+.rfb-progress span {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, var(--rfb-accent), var(--rfb-gold));
+}
+
+.rfb-activity-list,
+.rfb-route-list {
+	display: grid;
+	gap: 10px;
+}
+
+.rfb-activity-list a,
+.rfb-route-list div {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+	align-items: center;
+	padding: 12px;
+	border: 1px solid #e7edf2;
+	border-radius: 12px;
+	background: #fbfcfd;
+	text-decoration: none;
+}
+
+.rfb-activity-list span,
+.rfb-route-list span {
+	color: var(--rfb-muted);
+	font-size: 12px;
+}
+
+.rfb-activity-list em {
+	font-style: normal;
+	font-weight: 700;
+	color: var(--rfb-accent);
+}
+
+.rfb-ops-tabs-wrap {
+	margin-top: 14px;
+	margin-bottom: 0;
+}
+
+.rfb-ops-tabs {
+	margin: 0;
+	padding: 8px;
+	border: 1px solid #d9e4ef;
+	border-radius: 10px;
+	background: #fff;
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+@media (max-width: 900px) {
+	.rfb-ops-grid,
+	.rfb-charts-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.rfb-stat-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

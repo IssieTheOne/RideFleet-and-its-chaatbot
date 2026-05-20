@@ -1,0 +1,219 @@
+/* ── Base calendar grid (shared with availability) ── */
+
+.rfb-calendar-weekdays {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 18px;
+}
+
+.rfb-calendar-weekdays span {
+	color: var(--rfb-muted);
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: .08em;
+}
+
+.rfb-calendar-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 10px;
+	margin-top: 18px;
+}
+
+.rfb-calendar-day {
+	min-height: 110px;
+	background: #ffffff;
+	border: 1px solid var(--rfb-line);
+	border-radius: 8px;
+	padding: 10px;
+	aspect-ratio: auto;
+	font-size: 11px;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	transition: all 0.2s ease;
+	overflow: hidden;
+}
+
+.rfb-calendar-day:hover {
+	box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+	transform: translateY(-1px);
+}
+
+.rfb-calendar-day strong,
+.rfb-calendar-day a {
+	display: block;
+}
+
+.rfb-calendar-day a {
+	margin-top: 8px;
+	font-size: 12px;
+	text-decoration: none;
+}
+
+.rfb-calendar-day.rfb-day-available {
+	background: #f0fdf4;
+	border-color: #bbf7d0;
+}
+
+.rfb-calendar-day.rfb-day-busy {
+	background: #fef2f2;
+	border-color: #fecaca;
+}
+
+.rfb-calendar-day strong {
+	font-weight: 700;
+	font-size: 10px;
+	color: #17202a;
+	line-height: 1;
+	margin-bottom: 2px;
+}
+
+.rfb-day-status {
+	display: inline-block;
+	font-size: 9px;
+	padding: 2px 4px;
+	border-radius: 3px;
+	background: #e5e7eb;
+	color: #4b5563;
+	margin-bottom: 2px;
+}
+
+.rfb-calendar-day a {
+	display: block;
+	font-size: 9px;
+	padding: 2px;
+	margin-bottom: 1px;
+	border-radius: 3px;
+	background: rgba(15, 118, 110, 0.1);
+	color: #0f766e;
+	text-decoration: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	line-height: 1.2;
+}
+
+.rfb-calendar-day a:hover {
+	background: rgba(15, 118, 110, 0.2);
+	text-decoration: underline;
+}
+
+/* ── Admin-scoped calendar polish ── */
+
+.rfb-admin .rfb-calendar-weekdays {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 18px;
+}
+
+.rfb-admin .rfb-calendar-weekdays span {
+	padding: 10px 8px;
+	border-radius: 10px;
+	background: #eef2f4;
+	color: #475467;
+	text-align: center;
+	font-size: 11px;
+	font-weight: 900;
+	text-transform: uppercase;
+}
+
+.rfb-admin .rfb-calendar-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.rfb-admin .rfb-calendar-day {
+	aspect-ratio: auto;
+	min-height: 148px;
+	padding: 10px;
+	border-radius: 14px;
+	background: #ffffff;
+	border: 1px solid #e5e9ed;
+	overflow: hidden;
+}
+
+.rfb-admin .rfb-calendar-day.has-bookings {
+	border-color: rgba(15, 118, 110, .28);
+	background: #fbfffe;
+}
+
+.rfb-admin .rfb-calendar-empty {
+	background: transparent;
+	border-color: transparent;
+	box-shadow: none;
+}
+
+.rfb-admin .rfb-calendar-day > strong {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+	font-size: 18px;
+	line-height: 1;
+}
+
+.rfb-admin .rfb-calendar-day > strong span {
+	color: var(--rfb-muted);
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+}
+
+.rfb-admin .rfb-calendar-booking {
+	display: block;
+	margin-top: 7px;
+	padding: 8px;
+	border-radius: 10px;
+	background: #eef8f6;
+	color: #0f766e;
+	text-decoration: none;
+	white-space: normal;
+}
+
+.rfb-admin .rfb-calendar-booking b,
+.rfb-admin .rfb-calendar-booking span {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.rfb-admin .rfb-calendar-booking b {
+	font-size: 11px;
+}
+
+.rfb-admin .rfb-calendar-booking span {
+	margin-top: 4px;
+	color: #475467;
+	font-size: 11px;
+}
+
+.rfb-admin .rfb-calendar-booking.is-pending_payment {
+	background: #fff7df;
+	color: #8a5a00;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 900px) {
+	.rfb-admin .rfb-calendar-grid,
+	.rfb-admin .rfb-calendar-weekdays {
+		grid-template-columns: 1fr;
+	}
+
+	.rfb-admin .rfb-calendar-empty {
+		display: none;
+	}
+}
+
+@media (max-width: 720px) {
+	.rfb-calendar-grid,
+	.rfb-calendar-weekdays {
+		grid-template-columns: 1fr;
+	}
+}

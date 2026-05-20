@@ -1,0 +1,364 @@
+.rfac-admin {
+	max-width: 1180px;
+}
+
+.rfac-shell {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 18px;
+	margin-top: 18px;
+}
+
+.rfac-panel {
+	padding: 20px;
+	background: #ffffff;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.rfac-panel-wide {
+	grid-column: 1 / -1;
+}
+
+.rfac-panel h2 {
+	margin: 0 0 16px;
+	font-size: 18px;
+}
+
+.rfac-kicker {
+	margin: 0 0 6px;
+	color: #0f766e;
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.rfac-panel label {
+	display: block;
+	margin-bottom: 14px;
+}
+
+.rfac-panel label span {
+	display: block;
+	margin-bottom: 6px;
+	font-weight: 650;
+}
+
+.rfac-panel label small {
+	display: block;
+	margin-top: 4px;
+	color: #64748b;
+	font-weight: 400;
+}
+
+.rfac-panel input[type="text"],
+.rfac-panel input[type="password"],
+.rfac-panel input[type="email"],
+.rfac-panel input[type="url"],
+.rfac-panel input[type="number"],
+.rfac-panel select,
+.rfac-panel textarea {
+	width: 100%;
+	max-width: 100%;
+	border-radius: 6px;
+}
+
+.rfac-endpoints {
+	display: grid;
+	gap: 8px;
+	margin: 8px 0 14px;
+}
+
+.rfac-endpoints code,
+.rfac-panel > code {
+	display: inline-block;
+	padding: 8px 10px;
+	background: #f6f7f7;
+	border-radius: 6px;
+	font-size: 12px;
+}
+
+/* ─── Stats dashboard ──────────────────────────────────────────── */
+
+.rfac-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 12px;
+	margin-bottom: 20px;
+}
+
+.rfac-stat {
+	padding: 14px 16px;
+	background: linear-gradient(135deg, #ffffff, #f8fafc);
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #0f766e;
+	border-radius: 8px;
+}
+
+.rfac-stat-label {
+	display: block;
+	color: #64748b;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 4px;
+}
+
+.rfac-stat-value {
+	display: block;
+	color: #0f766e;
+	font-size: 26px;
+	font-weight: 800;
+	line-height: 1.2;
+}
+
+.rfac-stat-pending {
+	border-left-color: #d97706;
+}
+
+.rfac-stat-pending .rfac-stat-value {
+	color: #d97706;
+}
+
+/* ─── Test connection buttons ──────────────────────────────────── */
+
+.rfac-test-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 10px 0 0;
+	flex-wrap: wrap;
+}
+
+.rfac-test-status {
+	font-size: 13px;
+	font-weight: 600;
+	min-height: 18px;
+}
+
+.rfac-test-status-loading {
+	color: #64748b;
+}
+
+.rfac-test-status-ok {
+	color: #16a34a;
+}
+
+.rfac-test-status-error {
+	color: #dc2626;
+}
+
+/* ─── AI rewrite bar ───────────────────────────────────────────── */
+
+.rfac-rewrite-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	margin-top: 10px;
+	background: #f0fdf9;
+	border: 1px solid #99f6e4;
+	border-radius: 8px;
+}
+
+.rfac-rewrite-label {
+	font-weight: 700;
+	color: #0f766e;
+	font-size: 13px;
+}
+
+.rfac-rewrite-bar .button {
+	font-size: 12px;
+}
+
+.rfac-rewrite-bar .button[disabled] {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+/* ─── Color picker ─────────────────────────────────────────────── */
+
+.rfac-color-grid {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(120px, 1fr));
+	gap: 14px;
+}
+
+.rfac-color-grid input {
+	width: 100%;
+	height: 42px;
+	padding: 2px;
+}
+
+/* ─── Theme preview ────────────────────────────────────────────── */
+
+.rfac-theme-preview {
+	--rfac-primary: #0f766e;
+	--rfac-primary-dark: #0b5f59;
+	--rfac-surface: #ffffff;
+	--rfac-text: #17202a;
+	--rfac-muted: #64748b;
+	margin-top: 16px;
+	padding: 16px;
+	background: #f8fafc;
+	border-radius: 10px;
+	border: 1px dashed #cbd5e1;
+}
+
+.rfac-theme-preview-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 14px;
+	background: linear-gradient(135deg, var(--rfac-primary), var(--rfac-primary-dark));
+	color: #fff;
+	border-radius: 8px 8px 0 0;
+	font-weight: 700;
+}
+
+.rfac-theme-preview-body {
+	background: var(--rfac-surface);
+	padding: 14px;
+	border-radius: 0 0 8px 8px;
+	border: 1px solid rgba(15, 23, 42, 0.08);
+	border-top: 0;
+	display: grid;
+	gap: 8px;
+}
+
+.rfac-preview-bubble {
+	max-width: 70%;
+	padding: 8px 12px;
+	border-radius: 10px;
+	font-size: 13px;
+	color: var(--rfac-text);
+	background: #f8fafc;
+	border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.rfac-preview-bubble.is-user {
+	align-self: flex-end;
+	background: var(--rfac-primary);
+	color: #fff;
+	border-color: var(--rfac-primary);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+	.rfac-shell {
+		grid-template-columns: 1fr;
+	}
+
+	.rfac-color-grid {
+		grid-template-columns: repeat(2, minmax(120px, 1fr));
+	}
+}
+
+/* ─── History page ────────────────────────────────────────────── */
+
+.rfac-history-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr);
+	gap: 18px;
+	margin-top: 18px;
+}
+
+.rfac-history-toolbar {
+	display: flex;
+	gap: 10px;
+	margin-bottom: 14px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.rfac-history-toolbar form {
+	display: flex;
+	gap: 6px;
+	flex: 1;
+	min-width: 200px;
+}
+
+.rfac-history-toolbar input[type="search"] {
+	flex: 1;
+}
+
+.rfac-transcript {
+	display: grid;
+	gap: 10px;
+	max-height: 680px;
+	overflow: auto;
+}
+
+.rfac-transcript-message {
+	padding: 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	background: #f6f7f7;
+}
+
+.rfac-transcript-message strong,
+.rfac-transcript-message time {
+	display: block;
+}
+
+.rfac-transcript-message time {
+	color: #94a3b8;
+	font-size: 11px;
+	margin-top: 6px;
+}
+
+.rfac-transcript-message p {
+	margin: 6px 0;
+}
+
+.rfac-transcript-user {
+	background: #e7f7f4;
+}
+
+.rfac-transcript-assistant {
+	background: #fff;
+}
+
+.rfac-inline-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.rfac-status-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 8px;
+	border-radius: 999px;
+	background: #e7f7f4;
+	color: #0f766e;
+	font-weight: 700;
+	text-transform: capitalize;
+	font-size: 12px;
+}
+
+.rfac-status-pill.is-pending {
+	background: #fef3c7;
+	color: #b45309;
+}
+
+.rfac-status-pill.is-approved {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.rfac-status-pill.is-rejected {
+	background: #fee2e2;
+	color: #b91c1c;
+}
+
+@media (max-width: 1100px) {
+	.rfac-history-layout {
+		grid-template-columns: 1fr;
+	}
+}

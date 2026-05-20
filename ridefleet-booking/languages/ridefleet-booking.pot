@@ -1,0 +1,37 @@
+# RideFleet Booking translation template.
+msgid ""
+msgstr ""
+"Project-Id-Version: RideFleet Booking 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-11 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: ridefleet-booking\n"
+
+msgid "RideFleet Booking"
+msgstr ""
+
+msgid "Book a Ride"
+msgstr ""
+
+msgid "Pickup Location"
+msgstr ""
+
+msgid "Drop-Off Location"
+msgstr ""
+
+msgid "Reserve Ride"
+msgstr ""
+
+msgid "Coupons"
+msgstr ""
+
+msgid "Availability"
+msgstr ""
+
+msgid "Pricing Rules"
+msgstr ""
+
+msgid "Night surcharge"
+msgstr ""

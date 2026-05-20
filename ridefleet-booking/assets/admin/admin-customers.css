@@ -1,0 +1,194 @@
+/* ── Customer identity banner (profile page) ── */
+
+.rfb-cid-banner {
+	display: flex;
+	align-items: center;
+	gap: 28px;
+	padding: 28px 32px;
+	background: linear-gradient(135deg, #f0fdf9 0%, #ffffff 60%);
+	border-color: #c3e8dd;
+}
+
+.rfb-cid-avatar {
+	flex-shrink: 0;
+	width: 72px;
+	height: 72px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--rfb-accent), #0a6b62);
+	color: #fff;
+	font-size: 30px;
+	font-weight: 900;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 6px 20px rgba(15, 118, 110, .30);
+	letter-spacing: 0;
+}
+
+.rfb-cid-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.rfb-cid-body h2 {
+	margin: 0 0 12px;
+	font-size: 22px;
+	font-weight: 850;
+	color: #0f172a;
+}
+
+.rfb-cid-contacts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.rfb-contact-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 14px 5px 10px;
+	border-radius: 999px;
+	background: #ffffff;
+	border: 1px solid #d1dce6;
+	color: #334155;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	transition: border-color .12s, color .12s, box-shadow .12s;
+	white-space: nowrap;
+}
+
+.rfb-contact-pill:hover {
+	border-color: var(--rfb-accent);
+	color: var(--rfb-accent);
+	box-shadow: 0 0 0 3px rgba(15, 118, 110, .10);
+	text-decoration: none;
+}
+
+.rfb-contact-pill .dashicons {
+	font-size: 15px;
+	width: 15px;
+	height: 15px;
+	flex-shrink: 0;
+	color: var(--rfb-accent);
+}
+
+.rfb-contact-pill-muted {
+	color: var(--rfb-muted);
+	cursor: default;
+}
+
+.rfb-contact-pill-muted:hover {
+	border-color: #d1dce6;
+	color: var(--rfb-muted);
+	box-shadow: none;
+}
+
+.rfb-contact-pill-muted .dashicons {
+	color: var(--rfb-muted);
+}
+
+.rfb-cid-rule {
+	flex-shrink: 0;
+	width: 260px;
+	padding: 18px 20px;
+	background: #f8fafc;
+	border-radius: 12px;
+	border: 1px solid #e2e8f0;
+}
+
+.rfb-cid-rule .rfb-eyebrow {
+	display: block;
+	margin-bottom: 8px !important;
+}
+
+.rfb-cid-rule p {
+	margin: 0;
+	font-size: 13px;
+	color: var(--rfb-muted);
+	line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+	.rfb-cid-banner {
+		flex-wrap: wrap;
+	}
+
+	.rfb-cid-rule {
+		width: 100%;
+	}
+}
+
+@media (max-width: 600px) {
+	.rfb-cid-banner {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 16px;
+		padding: 20px;
+	}
+}
+
+/* ── Legacy profile card (kept for compat) ── */
+
+.rfb-profile-card {
+	display: grid;
+	gap: 8px;
+	padding: 18px;
+	border-radius: 14px;
+	background: linear-gradient(135deg, #eef8f6, #ffffff);
+	border: 1px solid #dbece9;
+}
+
+.rfb-profile-card strong {
+	font-size: 22px;
+	color: var(--rfb-ink);
+}
+
+.rfb-profile-card span {
+	color: var(--rfb-muted);
+}
+
+/* ── Customers table ── */
+
+.rfb-customers-table .rfb-customer-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.rfb-customers-table .rfb-customer-initials {
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--rfb-accent), #0b7c71);
+	color: #fff;
+	font-size: 15px;
+	font-weight: 800;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 2px 8px rgba(15, 118, 110, .22);
+}
+
+.rfb-customers-table .rfb-customer-row-meta strong {
+	display: block;
+	color: #0f172a;
+	font-weight: 700;
+}
+
+.rfb-customers-table .rfb-customer-row-meta span {
+	display: block;
+	color: var(--rfb-muted);
+	font-size: 12px;
+	margin-top: 1px;
+}
+
+.rfb-customers-table .rfb-customer-row-meta a {
+	text-decoration: none;
+}
+
+.rfb-customers-table .rfb-customer-row-meta a:hover strong {
+	color: var(--rfb-accent);
+}

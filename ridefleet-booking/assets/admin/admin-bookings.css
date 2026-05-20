@@ -1,0 +1,901 @@
+/* ── Bookings list table ── */
+
+.rfb-bookings-table {
+	border: 0 !important;
+}
+
+.rfb-bookings-table th {
+	padding: 14px 16px !important;
+	background: #f6f8fa;
+	color: var(--rfb-muted);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+}
+
+.rfb-bookings-table td {
+	padding: 16px !important;
+	vertical-align: middle;
+}
+
+.rfb-bookings-table td span {
+	display: block;
+	margin-top: 4px;
+	color: var(--rfb-muted);
+	font-size: 12px;
+}
+
+/* ── Dispatch cards (list view) ── */
+
+.rfb-dispatch-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 12px;
+}
+
+.rfb-dispatch-card {
+	display: grid;
+	gap: 10px;
+}
+
+.rfb-dispatch-card header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.rfb-dispatch-badges {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.rfb-dispatch-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr auto auto;
+	gap: 8px;
+	align-items: center;
+}
+
+.rfb-pay-form {
+	display: inline-flex;
+	align-items: center;
+}
+
+/* ────────────────────────────────────────────────
+   Booking hero — unified dark banner (detail view)
+   ──────────────────────────────────────────────── */
+
+.rfb-booking-hero {
+	display: flex;
+	flex-direction: column;
+	margin: 18px 0;
+	border-radius: 18px;
+	overflow: hidden;
+	background:
+		linear-gradient(135deg, rgba(15, 118, 110, .28), transparent 44%),
+		linear-gradient(315deg, rgba(245, 197, 24, .12), transparent 36%),
+		#111827;
+	color: #ffffff;
+	box-shadow: 0 22px 60px rgba(15, 23, 42, .22);
+}
+
+.rfb-booking-hero-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+	padding: 26px 28px 20px;
+	border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.rfb-booking-hero-header .rfb-kicker {
+	color: #7dd3c7 !important;
+	margin-bottom: 6px !important;
+}
+
+.rfb-booking-hero-header h1 {
+	color: #ffffff;
+	margin: 0 0 12px;
+	font-size: 26px;
+	font-weight: 850;
+	line-height: 1;
+}
+
+.rfb-booking-hero-badges {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.rfb-booking-hero-badges .rfb-badge {
+	margin: 0 !important;
+	padding: 5px 11px;
+	border: 1px solid rgba(255, 255, 255, .20);
+	font-size: 12px !important;
+	box-shadow: none !important;
+}
+
+.rfb-booking-hero-badges .rfb-badge-confirmed,
+.rfb-booking-hero-badges .rfb-badge-completed,
+.rfb-booking-hero-badges .rfb-badge-paid {
+	background: rgba(220, 252, 231, .9);
+	color: #14532d;
+}
+
+.rfb-booking-hero-badges .rfb-badge-pending_payment,
+.rfb-booking-hero-badges .rfb-badge-pending,
+.rfb-booking-hero-badges .rfb-badge-unpaid,
+.rfb-booking-hero-badges .rfb-badge-partially_paid {
+	background: rgba(254, 243, 199, .9);
+	color: #78350f;
+}
+
+.rfb-booking-hero-badges .rfb-badge-cancelled,
+.rfb-booking-hero-badges .rfb-badge-failed,
+.rfb-booking-hero-badges .rfb-badge-refunded {
+	background: rgba(254, 226, 226, .9);
+	color: #7f1d1d;
+}
+
+.rfb-booking-hero-header .button {
+	flex-shrink: 0;
+	background: rgba(255, 255, 255, .10);
+	border: 1px solid rgba(255, 255, 255, .24);
+	color: #ffffff;
+	font-weight: 700;
+	border-radius: 8px;
+	box-shadow: none;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.rfb-booking-hero-header .button:hover {
+	background: rgba(255, 255, 255, .18);
+	color: #ffffff;
+}
+
+.rfb-booking-hero-data {
+	display: grid;
+	grid-template-columns: 1.1fr 1.1fr .75fr auto;
+	gap: 0;
+}
+
+.rfb-booking-hero-data > div {
+	padding: 18px 24px;
+	border-right: 1px solid rgba(255, 255, 255, .08);
+}
+
+.rfb-booking-hero-data > div:last-child {
+	border-right: 0;
+}
+
+.rfb-booking-hero-data span {
+	display: block;
+	color: #9ee8dc;
+	font-size: 10px;
+	font-weight: 900;
+	text-transform: uppercase;
+	letter-spacing: .09em;
+	margin-bottom: 5px;
+}
+
+.rfb-booking-hero-data strong {
+	display: block;
+	font-size: 17px;
+	font-weight: 800;
+	color: #ffffff;
+	margin-bottom: 4px;
+	line-height: 1.2;
+}
+
+.rfb-booking-hero-data p {
+	display: block;
+	margin: 0;
+	color: #afc8d8;
+	font-size: 12px;
+}
+
+.rfb-booking-hero-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: center;
+	gap: 8px;
+	min-width: 140px;
+}
+
+.rfb-booking-hero-actions .button,
+.rfb-booking-hero-actions .rfb-pay-form .button {
+	display: block;
+	width: 100%;
+	text-align: center;
+	margin: 0;
+	border-radius: 8px;
+	font-weight: 700;
+	box-shadow: none;
+	border: 1px solid rgba(255, 255, 255, .22);
+	background: rgba(255, 255, 255, .10);
+	color: #fff;
+}
+
+.rfb-booking-hero-actions .button:hover,
+.rfb-booking-hero-actions .rfb-pay-form .button:hover {
+	background: rgba(255, 255, 255, .18);
+	color: #fff;
+}
+
+.rfb-booking-hero-actions .button-primary {
+	background: var(--rfb-accent) !important;
+	border-color: transparent !important;
+}
+
+.rfb-booking-hero-actions .rfb-pay-form {
+	display: block;
+}
+
+/* ── Workflow stepper ── */
+
+.rfb-workflow {
+	display: flex;
+	gap: 0;
+	margin: 18px 0;
+	border: 1px solid var(--rfb-line);
+	border-radius: 16px;
+	overflow: hidden;
+	background: #fff;
+	box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
+}
+
+.rfb-workflow div {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 18px;
+	border-right: 1px solid var(--rfb-line);
+	border-top: 3px solid transparent;
+	background: #fff;
+}
+
+.rfb-workflow div:last-child {
+	border-right: 0;
+}
+
+.rfb-workflow strong {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 999px;
+	background: #eef2f4;
+	color: var(--rfb-muted);
+	font-size: 13px;
+}
+
+.rfb-workflow span {
+	font-size: 13px;
+	color: var(--rfb-muted);
+	font-weight: 600;
+}
+
+.rfb-workflow .is-active {
+	border-top-color: var(--rfb-accent);
+	background: #f0fdfb;
+}
+
+.rfb-workflow .is-active strong {
+	background: var(--rfb-accent);
+	color: #ffffff;
+}
+
+.rfb-workflow .is-active span {
+	color: #0f172a;
+	font-weight: 800;
+}
+
+/* ── Booking detail page ── */
+
+.rfb-booking-detail-page {
+	max-width: 1440px;
+}
+
+/* ────────────────────────────────────────────────
+   Detail content grid — equal-height cards
+   ──────────────────────────────────────────────── */
+
+.rfb-booking-detail-grid {
+	display: grid;
+	grid-template-columns: minmax(240px, .9fr) minmax(280px, 1.1fr) minmax(240px, .85fr);
+	gap: 16px;
+	margin-top: 18px;
+	align-items: stretch; /* equal height per row */
+}
+
+.rfb-detail-card {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-radius: 18px;
+}
+
+.rfb-detail-card h2 {
+	margin: 0 0 16px;
+	font-size: 15px;
+	font-weight: 850;
+	color: #0f172a;
+	letter-spacing: -.01em;
+}
+
+/* ── Shared card footer — pinned to bottom ── */
+
+.rfb-card-footer {
+	margin-top: auto;
+	padding-top: 16px;
+	border-top: 1px solid var(--rfb-line);
+}
+
+a.rfb-card-footer-btn,
+button.rfb-card-footer-btn {
+	display: block !important;
+	width: 100% !important;
+	text-align: center;
+	box-sizing: border-box;
+	background: var(--rfb-accent) !important;
+	border: 1px solid transparent !important;
+	color: #ffffff !important;
+	border-radius: 10px;
+	font-weight: 700;
+	font-size: 13px;
+	padding: 9px 16px;
+	box-shadow: 0 4px 14px rgba(15, 118, 110, .22);
+	text-decoration: none;
+	cursor: pointer;
+	transition: background .12s, box-shadow .12s;
+}
+
+a.rfb-card-footer-btn:hover,
+button.rfb-card-footer-btn:hover {
+	background: #0b6059 !important;
+	color: #ffffff !important;
+	box-shadow: 0 6px 18px rgba(15, 118, 110, .34);
+}
+
+/* ── Ride Details card ── */
+
+.rfb-detail-list {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 8px 16px;
+	margin: 0 0 0;
+	flex: 1;
+}
+
+.rfb-detail-list dt {
+	color: var(--rfb-muted);
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .05em;
+	padding-top: 2px;
+	white-space: nowrap;
+}
+
+.rfb-detail-list dd {
+	margin: 0;
+	color: #0f172a;
+	font-weight: 600;
+	font-size: 13px;
+	word-break: break-word;
+}
+
+.rfb-detail-list dd strong {
+	color: var(--rfb-accent);
+	font-size: 15px;
+}
+
+.rfb-detail-list dd a {
+	color: var(--rfb-accent);
+}
+
+/* ── Dispatch card ── */
+
+.rfb-dispatch-form {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+}
+
+.rfb-dispatch-fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+}
+
+.rfb-detail-card-dispatch label {
+	display: block;
+	margin: 0 0 12px;
+}
+
+.rfb-detail-card-dispatch label span {
+	display: block;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--rfb-muted);
+	margin-bottom: 5px;
+	text-transform: uppercase;
+	letter-spacing: .05em;
+}
+
+.rfb-detail-card-dispatch select {
+	width: 100%;
+	min-height: 38px;
+	border-radius: 8px !important;
+}
+
+
+/* ── Customer card ── */
+
+.rfb-detail-card-customer {
+	background: linear-gradient(160deg, #ffffff 60%, #f2faf8);
+	text-align: center;
+}
+
+.rfb-customer-body {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	flex: 1;
+}
+
+.rfb-customer-avatar {
+	flex-shrink: 0;
+	width: 56px;
+	height: 56px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--rfb-accent), #0b7c71);
+	color: #fff;
+	font-size: 22px;
+	font-weight: 800;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 14px rgba(15, 118, 110, .30);
+}
+
+.rfb-customer-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.rfb-customer-meta strong {
+	display: block;
+	color: #0f172a;
+	font-size: 16px;
+	font-weight: 850;
+	margin-bottom: 6px;
+}
+
+.rfb-customer-meta a {
+	display: block;
+	color: var(--rfb-muted);
+	font-size: 13px;
+	text-decoration: none;
+	margin-bottom: 3px;
+	transition: color .12s;
+}
+
+.rfb-customer-meta a:hover {
+	color: var(--rfb-accent);
+	text-decoration: underline;
+}
+
+.rfb-customer-bookings {
+	display: inline-block;
+	margin-top: 8px;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: #f0fdf8;
+	border: 1px solid #b6e8d6;
+	color: var(--rfb-accent);
+	font-weight: 700;
+	font-size: 12px;
+}
+
+/* ── Internal Notes card ── */
+
+.rfb-detail-card-notes {
+	grid-column: 1 / span 2;
+	align-self: start;
+}
+
+.rfb-notes-layout {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.rfb-notes-form {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.rfb-notes-form textarea {
+	flex: 1;
+	min-height: 62px;
+	max-height: 110px;
+	border-radius: 10px !important;
+	border-color: #d1dce6;
+	resize: vertical;
+	font-size: 13px;
+	padding: 8px 10px;
+	box-sizing: border-box;
+}
+
+.rfb-notes-submit {
+	flex-shrink: 0;
+	align-self: flex-end;
+	white-space: nowrap;
+}
+
+.rfb-notes-history {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	overflow-y: auto;
+	max-height: 160px;
+	padding-right: 4px;
+}
+
+.rfb-notes-history .rfb-muted-note {
+	margin: auto 0;
+	text-align: center;
+	padding: 24px 0;
+}
+
+.rfb-notes-history .rfb-timeline {
+	display: grid;
+	gap: 8px;
+}
+
+.rfb-notes-history .rfb-timeline div {
+	padding: 10px 12px;
+	border-left: 3px solid var(--rfb-accent);
+	border-radius: 8px;
+	background: #f8fafc;
+}
+
+.rfb-notes-history .rfb-timeline strong {
+	display: block;
+	color: var(--rfb-muted);
+	font-size: 11px;
+	margin-bottom: 3px;
+}
+
+.rfb-notes-history .rfb-timeline span {
+	display: block;
+	color: #0f172a;
+	font-size: 13px;
+}
+
+/* ── Invoice panel ── */
+
+.rfb-invoice-panel {
+	padding: 0;
+	overflow: hidden;
+	align-self: start;
+}
+
+.rfb-invoice-panel details {
+	display: block;
+}
+
+.rfb-invoice-panel summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 20px 20px 18px;
+	cursor: pointer;
+	list-style: none;
+	border-bottom: 1px solid transparent;
+	transition: background .12s, border-color .12s;
+}
+
+.rfb-invoice-panel summary::-webkit-details-marker {
+	display: none;
+}
+
+.rfb-invoice-panel details[open] summary {
+	border-bottom-color: var(--rfb-line);
+	background: #f8fafc;
+}
+
+.rfb-invoice-summary-text strong {
+	display: block;
+	color: #17202a;
+	font-size: 15px;
+	font-weight: 800;
+	margin-bottom: 3px;
+}
+
+.rfb-invoice-summary-text span {
+	display: block;
+	color: #94a3b8;
+	font-size: 12px;
+}
+
+.rfb-invoice-panel summary em {
+	flex-shrink: 0;
+	padding: 5px 12px;
+	border-radius: 999px;
+	background: #eef2f4;
+	color: #64748b;
+	font-style: normal;
+	font-size: 12px;
+	font-weight: 800;
+	white-space: nowrap;
+}
+
+.rfb-invoice-panel summary em.is-requested {
+	background: #dcfce7;
+	color: #14532d;
+}
+
+.rfb-invoice-form {
+	padding: 18px 20px;
+}
+
+
+.rfb-invoice-fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+.rfb-invoice-form label {
+	display: block;
+	margin: 0 0 10px;
+}
+
+.rfb-invoice-form label span {
+	display: block;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--rfb-muted);
+	text-transform: uppercase;
+	letter-spacing: .05em;
+	margin-bottom: 5px;
+}
+
+.rfb-invoice-form input[type="text"],
+.rfb-invoice-form input[type="email"],
+.rfb-invoice-form textarea {
+	width: 100%;
+	max-width: 100%;
+	min-height: 36px;
+	border-radius: 8px !important;
+	box-sizing: border-box;
+}
+
+.rfb-invoice-form textarea {
+	min-height: 64px;
+	resize: vertical;
+}
+
+.rfb-invoice-form .rfb-card-footer {
+	margin-top: 8px;
+}
+
+/* ── Change request panel ── */
+
+.rfb-change-request-panel {
+	grid-column: 1 / -1;
+	border-color: #fde68a;
+	background: linear-gradient(135deg, #fffdf5, #ffffff);
+}
+
+.rfb-change-request-panel .rfb-timeline div {
+	border-left-color: #f59e0b;
+	background: #fffbeb;
+}
+
+/* ── Misc ── */
+
+.rfb-muted-note {
+	color: var(--rfb-muted);
+	font-size: 13px;
+	margin: 0 0 12px;
+}
+
+/* ── Manual booking form ── */
+
+.rfb-manual-booking > .rfb-settings-grid {
+	grid-template-columns: repeat(2, minmax(320px, 1fr));
+}
+
+.rfb-manual-step {
+	position: relative;
+	padding: 18px;
+	border: 1px solid #d9e4ef;
+	border-radius: 12px;
+	background: #fff;
+}
+
+.rfb-route-builder {
+	display: grid;
+	grid-template-columns: minmax(320px, 1fr) minmax(360px, 0.95fr);
+	gap: 18px;
+	align-items: stretch;
+}
+
+.rfb-route-preview {
+	display: grid;
+	gap: 10px;
+	align-content: start;
+	padding: 12px;
+	border: 1px solid #d9e4ef;
+	border-radius: 10px;
+	background: #f8fafc;
+}
+
+.rfb-route-preview .rfb-admin-map {
+	min-height: 420px;
+	border-color: #cbd5e1;
+}
+
+.rfb-extra-checklist {
+	display: grid;
+	gap: 8px;
+	margin: 12px 0;
+	padding: 12px;
+	border: 1px solid #d9e4ef;
+	border-radius: 10px;
+	background: #f8fafc;
+}
+
+.rfb-extra-checklist label {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin: 0;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.rfb-extra-checklist small {
+	color: #64748b;
+}
+
+.rfb-map-drawing {
+	display: grid;
+	gap: 10px;
+	margin-top: 16px;
+	padding: 14px;
+	border: 1px dashed #b9cad8;
+	border-radius: 14px;
+	background: #f8fbfd;
+}
+
+.rfb-map-drawing h3 {
+	margin: 0;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 1200px) {
+	.rfb-booking-hero-data {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.rfb-booking-detail-grid {
+		grid-template-columns: 1fr 1fr;
+		align-items: start;
+	}
+
+	.rfb-detail-card-notes {
+		grid-column: 1 / -1;
+	}
+
+	.rfb-invoice-panel {
+		grid-column: 1 / -1;
+	}
+
+	.rfb-notes-layout {
+		grid-template-columns: 1fr;
+	}
+
+	.rfb-invoice-fields {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 900px) {
+	.rfb-workflow div {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 6px;
+		padding: 12px 14px;
+	}
+
+	.rfb-booking-hero-data {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+@media (max-width: 782px) {
+	.rfb-booking-hero-header {
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.rfb-booking-hero-data,
+	.rfb-booking-detail-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.rfb-booking-detail-grid {
+		align-items: start;
+	}
+
+	.rfb-booking-hero-data > div {
+		border-right: 0;
+		border-bottom: 1px solid rgba(255, 255, 255, .08);
+	}
+
+	.rfb-booking-hero-data > div:last-child {
+		border-bottom: 0;
+	}
+
+	.rfb-booking-hero-actions {
+		min-width: 0;
+	}
+
+	.rfb-workflow {
+		flex-direction: column;
+		border-radius: 14px;
+	}
+
+	.rfb-workflow div {
+		border-right: 0;
+		border-bottom: 1px solid var(--rfb-line);
+		border-top: 0;
+		border-left: 3px solid transparent;
+		padding: 12px 16px;
+		flex-direction: row;
+	}
+
+	.rfb-workflow div:last-child {
+		border-bottom: 0;
+	}
+
+	.rfb-workflow .is-active {
+		border-left-color: var(--rfb-accent);
+		background: #f0fdfb;
+	}
+
+	.rfb-dispatch-actions,
+	.rfb-dispatch-fields {
+		grid-template-columns: 1fr;
+	}
+
+	.rfb-detail-card-notes,
+	.rfb-invoice-panel,
+	.rfb-change-request-panel {
+		grid-column: 1;
+	}
+
+	.rfb-route-builder {
+		grid-template-columns: 1fr;
+	}
+}
