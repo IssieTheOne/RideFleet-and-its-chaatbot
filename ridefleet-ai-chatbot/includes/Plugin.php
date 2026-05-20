@@ -12,6 +12,8 @@ use RideFleetAIChatbot\Core\Installer;
 use RideFleetAIChatbot\Frontend\Widget;
 use RideFleetAIChatbot\Rest\Routes;
 use RideFleetAIChatbot\Services\SessionRepository;
+use RideFleetAIChatbot\Support\Options;
+use RideFleetAIChatbot\Support\UpdateChecker;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -45,5 +47,16 @@ final class Plugin {
 		Widget::register_hooks();
 
 		add_action(Installer::CRON_CLEANUP_HOOK, [SessionRepository::class, 'cleanup_old_sessions']);
+
+		$update_endpoint = (string) Options::get('update_endpoint', '');
+		if ('' !== $update_endpoint) {
+			(new UpdateChecker(
+				'ridefleet-ai-chatbot',
+				plugin_basename(RFAC_PLUGIN_FILE),
+				RFAC_VERSION,
+				$update_endpoint,
+				(string) Options::get('license_key', '')
+			))->register();
+		}
 	}
 }

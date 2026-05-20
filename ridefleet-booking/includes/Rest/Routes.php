@@ -172,6 +172,16 @@ final class Routes {
 				'permission_callback' => [self::class, 'can_chatbot_access'],
 			]
 		);
+
+		register_rest_route(
+			'taxi-booking/v1',
+			'/validate-coupon',
+			[
+				'methods' => 'POST',
+				'callback' => [self::class, 'chatbot_validate_coupon'],
+				'permission_callback' => [self::class, 'can_chatbot_access'],
+			]
+		);
 	}
 
 	public static function public_settings(): WP_REST_Response {
@@ -756,6 +766,24 @@ final class Routes {
 			return new WP_REST_Response(['message' => __('Too many booking attempts. Please wait and try again.', 'ridefleet-booking')], 429);
 		}
 
+		// Idempotency: same client + same payload returns the existing booking.
+		$idempotency_key = sanitize_text_field((string) ($request->get_header('Idempotency-Key') ?: $request->get_param('idempotency_key')));
+		if ('' !== $idempotency_key) {
+			$payload_hash = md5(wp_json_encode([
+				$idempotency_key,
+				(string) $request->get_param('pickup_address'),
+				(string) $request->get_param('dropoff_address'),
+				(string) $request->get_param('customer_phone'),
+				(string) $request->get_param('pickup_time'),
+				(float) $request->get_param('final_price'),
+			]));
+			$cache_key = 'rfb_idem_' . $payload_hash;
+			$cached = get_transient($cache_key);
+			if (is_array($cached)) {
+				return new WP_REST_Response($cached, 200);
+			}
+		}
+
 		$payload = [
 			'pickup_address' => sanitize_textarea_field((string) $request->get_param('pickup_address')),
 			'dropoff_address' => sanitize_textarea_field((string) $request->get_param('dropoff_address')),
@@ -768,6 +796,7 @@ final class Routes {
 			'vehicle_id' => absint($request->get_param('vehicle_id')),
 			'vehicle_name' => sanitize_text_field((string) $request->get_param('vehicle_name')),
 			'extras' => self::normalize_extras($request->get_param('extras')),
+			'coupon_code' => strtoupper(sanitize_text_field((string) $request->get_param('coupon_code'))),
 		];
 
 		foreach (['pickup_address', 'dropoff_address', 'customer_name', 'customer_phone', 'pickup_time'] as $key) {
@@ -822,7 +851,7 @@ final class Routes {
 			'vehicleId' => $payload['vehicle_id'],
 			'routeId' => 0,
 			'extras' => $payload['extras'],
-			'couponCode' => '',
+			'couponCode' => '' !== $payload['coupon_code'] && CouponService::mark_used($payload['coupon_code']) ? $payload['coupon_code'] : '',
 			'customerFirstName' => $name_parts[0] ?? $payload['customer_name'],
 			'customerLastName' => $name_parts[1] ?? '',
 			'customerEmail' => '',
@@ -858,15 +887,35 @@ final class Routes {
 		}
 		NotificationService::booking_created((int) $booking['id']);
 
-		return new WP_REST_Response(
-			[
-				'success' => true,
-				'booking_id' => $booking['bookingNumber'],
-				'internal_id' => (int) $booking['id'],
-				'status' => $booking['status'],
-			],
-			201
-		);
+		$response_body = [
+			'success' => true,
+			'booking_id' => $booking['bookingNumber'],
+			'internal_id' => (int) $booking['id'],
+			'status' => $booking['status'],
+		];
+
+		if (isset($cache_key)) {
+			set_transient($cache_key, $response_body, HOUR_IN_SECONDS);
+		}
+
+		return new WP_REST_Response($response_body, 201);
+	}
+
+	public static function chatbot_validate_coupon(WP_REST_Request $request): WP_REST_Response {
+		if (!RateLimiter::check($request, 'chatbot_coupon', 30, MINUTE_IN_SECONDS)) {
+			return new WP_REST_Response(['valid' => false, 'message' => __('Too many requests.', 'ridefleet-booking')], 429);
+		}
+
+		$code = sanitize_text_field((string) $request->get_param('code'));
+		$subtotal = max(0, (float) $request->get_param('subtotal'));
+
+		$result = CouponService::discount($code, $subtotal);
+		return new WP_REST_Response([
+			'valid' => !empty($result['valid']),
+			'code' => (string) ($result['code'] ?? ''),
+			'amount' => (float) ($result['amount'] ?? 0),
+			'message' => (string) ($result['message'] ?? ''),
+		]);
 	}
 
 	public static function chatbot_place_search(WP_REST_Request $request): WP_REST_Response {

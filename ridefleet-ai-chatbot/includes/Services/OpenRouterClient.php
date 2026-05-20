@@ -7,7 +7,9 @@
 
 namespace RideFleetAIChatbot\Services;
 
+use RideFleetAIChatbot\Support\Logger;
 use RideFleetAIChatbot\Support\Options;
+use RideFleetAIChatbot\Support\UsageMeter;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
@@ -19,6 +21,15 @@ final class OpenRouterClient {
 		$key = (string) Options::get('openrouter_key', '');
 		if (!$this->valid_key($key)) {
 			return ['success' => false, 'message' => __('OpenRouter is not configured yet.', 'ridefleet-ai-chatbot')];
+		}
+
+		if (UsageMeter::circuit_open()) {
+			return ['success' => false, 'message' => __('AI service is temporarily unavailable.', 'ridefleet-ai-chatbot')];
+		}
+
+		if (UsageMeter::over_budget()) {
+			Logger::warning('openrouter', 'Daily token budget exceeded — skipping classifier call.');
+			return ['success' => false, 'message' => __('Daily AI budget exhausted.', 'ridefleet-ai-chatbot')];
 		}
 
 		$state = sanitize_key((string) ($session['state'] ?? 'greeting'));
@@ -213,6 +224,8 @@ final class OpenRouterClient {
 
 	private function decode_json_response(array|WP_Error $response): array {
 		if (is_wp_error($response)) {
+			UsageMeter::circuit_record_failure();
+			Logger::warning('openrouter', $response->get_error_message());
 			return ['success' => false, 'message' => $response->get_error_message()];
 		}
 
@@ -222,8 +235,17 @@ final class OpenRouterClient {
 		$data = json_decode($content, true);
 
 		if ($status < 200 || $status >= 300 || !is_array($body) || !is_array($data)) {
+			UsageMeter::circuit_record_failure();
+			Logger::warning('openrouter', 'Non-2xx or unparseable response', ['status' => $status]);
 			return ['success' => false, 'message' => __('The AI classifier is unavailable right now.', 'ridefleet-ai-chatbot'), 'status' => $status];
 		}
+
+		$usage = is_array($body['usage'] ?? null) ? $body['usage'] : [];
+		UsageMeter::record(
+			(int) ($usage['prompt_tokens'] ?? 0),
+			(int) ($usage['completion_tokens'] ?? 0)
+		);
+		UsageMeter::circuit_record_success();
 
 		return ['success' => true, 'data' => $data];
 	}

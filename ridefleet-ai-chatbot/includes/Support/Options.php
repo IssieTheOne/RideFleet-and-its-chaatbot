@@ -34,6 +34,14 @@ final class Options {
 			'core_plugin_api_key',
 			'dispatch_contact_number',
 			'max_price_negotiation_discount',
+			'data_retention_days',
+			'notification_email',
+			'notifications_enabled',
+			'ai_daily_token_budget',
+			'ai_per_ip_daily_cap',
+			'session_signing_secret',
+			'update_endpoint',
+			'license_key',
 			'chatbot_ui_theme',
 		];
 
@@ -45,5 +53,17 @@ final class Options {
 		}
 
 		update_option('rfac_settings', array_replace_recursive(Installer::defaults(), $next), false);
+	}
+
+	/**
+	 * Lazily generated HMAC signing secret. Persists once created so existing signatures stay valid.
+	 */
+	public static function signing_secret(): string {
+		$secret = (string) self::get('session_signing_secret', '');
+		if ('' === $secret) {
+			$secret = wp_generate_password(48, true, true);
+			self::update(['session_signing_secret' => $secret]);
+		}
+		return $secret;
 	}
 }

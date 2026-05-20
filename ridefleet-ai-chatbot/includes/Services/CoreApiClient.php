@@ -314,6 +314,49 @@ final class CoreApiClient {
 		return $normalized;
 	}
 
+	public function validate_coupon(string $code, float $subtotal = 0): array {
+		$code = sanitize_text_field($code);
+		if ('' === $code) {
+			return ['valid' => false, 'message' => __('No coupon code.', 'ridefleet-ai-chatbot')];
+		}
+
+		if ($this->can_use_local_core() && class_exists('\RideFleetBooking\Booking\CouponService')) {
+			$result = \RideFleetBooking\Booking\CouponService::discount($code, max(0.0, $subtotal));
+			return [
+				'valid' => !empty($result['valid']),
+				'code' => (string) ($result['code'] ?? $code),
+				'amount' => (float) ($result['amount'] ?? 0),
+				'message' => (string) ($result['message'] ?? ''),
+			];
+		}
+
+		$response = wp_remote_post(
+			$this->endpoint('/wp-json/taxi-booking/v1/validate-coupon'),
+			[
+				'timeout' => 8,
+				'redirection' => 2,
+				'headers' => array_merge($this->headers(), ['Content-Type' => 'application/json; charset=utf-8']),
+				'body' => wp_json_encode(['code' => $code, 'subtotal' => $subtotal]),
+			]
+		);
+
+		if (is_wp_error($response)) {
+			return ['valid' => false, 'message' => $response->get_error_message()];
+		}
+
+		$body = json_decode((string) wp_remote_retrieve_body($response), true);
+		if (!is_array($body)) {
+			return ['valid' => false, 'message' => __('Coupon service unreachable.', 'ridefleet-ai-chatbot')];
+		}
+
+		return [
+			'valid' => !empty($body['valid']),
+			'code' => (string) ($body['code'] ?? $code),
+			'amount' => (float) ($body['amount'] ?? 0),
+			'message' => (string) ($body['message'] ?? ''),
+		];
+	}
+
 	public function search_core_places(string $input): array {
 		$input = trim($input);
 		if (strlen($input) < 3) {

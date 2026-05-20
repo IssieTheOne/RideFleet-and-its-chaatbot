@@ -204,15 +204,22 @@ final class CoreBookingPricingEngine {
 	}
 
 	private static function geocode(string $address): ?array {
-		$key = Options::get('google_maps_api_key', '');
-		if (!$key) {
-			return null;
-		}
-
 		$cache_key = 'rfb_geocode_' . md5(strtolower(trim($address)));
+		$persistent_key = 'rfb_geocode_lkg_' . md5(strtolower(trim($address))); // last-known-good
+
 		$cached = get_transient($cache_key);
 		if (is_array($cached) && isset($cached['lat'], $cached['lng'])) {
 			return ['lat' => (float) $cached['lat'], 'lng' => (float) $cached['lng']];
+		}
+
+		$key = Options::get('google_maps_api_key', '');
+		if (!$key) {
+			// No key configured — fall back to last-known-good if we have it,
+			// otherwise let the caller treat the address as ungeocoded.
+			$lkg = get_option($persistent_key);
+			return is_array($lkg) && isset($lkg['lat'], $lkg['lng'])
+				? ['lat' => (float) $lkg['lat'], 'lng' => (float) $lkg['lng']]
+				: null;
 		}
 
 		$response = wp_remote_get(
@@ -227,17 +234,29 @@ final class CoreBookingPricingEngine {
 		);
 
 		if (is_wp_error($response)) {
+			// Network failure: graceful degradation to the persisted last-known-good
+			// coordinate for this address so quotes can still complete (with a flag).
+			$lkg = get_option($persistent_key);
+			if (is_array($lkg) && isset($lkg['lat'], $lkg['lng'])) {
+				return ['lat' => (float) $lkg['lat'], 'lng' => (float) $lkg['lng'], 'degraded' => true];
+			}
 			return null;
 		}
 
 		$body = json_decode((string) wp_remote_retrieve_body($response), true);
 		$location = $body['results'][0]['geometry']['location'] ?? null;
 		if (!is_array($location) || !isset($location['lat'], $location['lng'])) {
-			return null;
+			$lkg = get_option($persistent_key);
+			return is_array($lkg) && isset($lkg['lat'], $lkg['lng'])
+				? ['lat' => (float) $lkg['lat'], 'lng' => (float) $lkg['lng'], 'degraded' => true]
+				: null;
 		}
 
 		$coords = ['lat' => (float) $location['lat'], 'lng' => (float) $location['lng']];
 		set_transient($cache_key, $coords, WEEK_IN_SECONDS);
+		// Persist last-known-good for graceful degradation. autoload=false to
+		// avoid bloating the options cache for high-traffic sites.
+		update_option($persistent_key, $coords, false);
 
 		return $coords;
 	}

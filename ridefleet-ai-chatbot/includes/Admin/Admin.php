@@ -36,6 +36,8 @@ final class Admin {
 		add_action('admin_post_rfac_delete_chat_session', [ChatHistoryPage::class, 'delete']);
 		add_action('admin_post_rfac_export_chat_sessions', [ChatHistoryPage::class, 'export_csv']);
 		add_action('admin_post_rfac_update_change_request', [ChangeRequestsPage::class, 'update']);
+		add_action('admin_post_rfac_purge_errors', [ErrorLogPage::class, 'purge']);
+		add_action('admin_post_rfac_erase_customer', [PrivacyPage::class, 'erase']);
 		add_action('wp_ajax_rfac_test_openrouter', [self::class, 'ajax_test_openrouter']);
 		add_action('wp_ajax_rfac_test_core_api', [self::class, 'ajax_test_core_api']);
 		add_action('wp_ajax_rfac_rewrite_bio', [self::class, 'ajax_rewrite_bio']);
@@ -74,6 +76,24 @@ final class Admin {
 			'manage_options',
 			'ridefleet-ai-chatbot-changes',
 			[ChangeRequestsPage::class, 'render']
+		);
+
+		add_submenu_page(
+			'ridefleet-ai-chatbot',
+			__('Error Log', 'ridefleet-ai-chatbot'),
+			__('Error Log', 'ridefleet-ai-chatbot'),
+			'manage_options',
+			'ridefleet-ai-chatbot-errors',
+			[ErrorLogPage::class, 'render']
+		);
+
+		add_submenu_page(
+			'ridefleet-ai-chatbot',
+			__('Data Privacy', 'ridefleet-ai-chatbot'),
+			__('Privacy', 'ridefleet-ai-chatbot'),
+			'manage_options',
+			'ridefleet-ai-chatbot-privacy',
+			[PrivacyPage::class, 'render']
 		);
 	}
 
@@ -428,6 +448,49 @@ final class Admin {
 						<button type="button" class="button" data-rfac-rewrite="friendly"><?php esc_html_e('Friendly tone', 'ridefleet-ai-chatbot'); ?></button>
 						<button type="button" class="button" data-rfac-rewrite="grammar"><?php esc_html_e('Fix grammar', 'ridefleet-ai-chatbot'); ?></button>
 						<span id="rfac-rewrite-status" class="rfac-test-status"></span>
+					</div>
+				</section>
+
+				<section class="rfac-panel rfac-panel-wide">
+					<p class="rfac-kicker"><?php esc_html_e('Production safeguards', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('AI cost ceiling', 'ridefleet-ai-chatbot'); ?></h2>
+					<div class="rfac-shell" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
+						<label style="margin: 0;">
+							<span><?php esc_html_e('Daily token budget (across all users)', 'ridefleet-ai-chatbot'); ?></span>
+							<input type="number" name="ai_daily_token_budget" value="<?php echo esc_attr((string) ($options['ai_daily_token_budget'] ?? 250000)); ?>" min="0" step="1000">
+							<small><?php esc_html_e('Once this many OpenRouter tokens have been spent today, the chatbot stops calling the AI and falls back to its local classifier. 0 disables the cap.', 'ridefleet-ai-chatbot'); ?></small>
+						</label>
+						<label style="margin: 0;">
+							<span><?php esc_html_e('Per-IP daily request cap', 'ridefleet-ai-chatbot'); ?></span>
+							<input type="number" name="ai_per_ip_daily_cap" value="<?php echo esc_attr((string) ($options['ai_per_ip_daily_cap'] ?? 200)); ?>" min="0" step="10">
+							<small><?php esc_html_e('Hard ceiling per visitor IP per day. Protects against scrapers. 0 disables it.', 'ridefleet-ai-chatbot'); ?></small>
+						</label>
+					</div>
+					<?php $usage = \RideFleetAIChatbot\Support\UsageMeter::todays_usage(); ?>
+					<div style="margin-top:14px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px;color:#475569;">
+						<strong><?php esc_html_e('Today so far:', 'ridefleet-ai-chatbot'); ?></strong>
+						<?php echo esc_html(number_format_i18n($usage['tokens_in'] + $usage['tokens_out'])); ?> <?php esc_html_e('tokens', 'ridefleet-ai-chatbot'); ?>
+						· <?php echo esc_html(number_format_i18n($usage['requests'])); ?> <?php esc_html_e('requests', 'ridefleet-ai-chatbot'); ?>
+						· <?php echo esc_html(number_format_i18n($usage['unique_ips'])); ?> <?php esc_html_e('unique IPs', 'ridefleet-ai-chatbot'); ?>
+					</div>
+				</section>
+
+				<section class="rfac-panel rfac-panel-wide">
+					<p class="rfac-kicker"><?php esc_html_e('Distribution', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Over-the-air updates', 'ridefleet-ai-chatbot'); ?></h2>
+					<p style="color:#64748b;margin-top:0;">
+						<?php esc_html_e('Point this at a JSON manifest endpoint (e.g. a private GitHub release page) and WordPress will surface updates on the Plugins screen, no manual ZIP uploads needed.', 'ridefleet-ai-chatbot'); ?>
+					</p>
+					<div class="rfac-shell" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
+						<label style="margin: 0;">
+							<span><?php esc_html_e('Update manifest URL', 'ridefleet-ai-chatbot'); ?></span>
+							<input type="url" name="update_endpoint" value="<?php echo esc_attr((string) ($options['update_endpoint'] ?? '')); ?>" placeholder="https://updates.example.com/ridefleet-ai-chatbot.json">
+						</label>
+						<label style="margin: 0;">
+							<span><?php esc_html_e('License key (optional)', 'ridefleet-ai-chatbot'); ?></span>
+							<input type="password" name="license_key" value="<?php echo esc_attr((string) ($options['license_key'] ?? '')); ?>" autocomplete="off" placeholder="RFB-XXXX-XXXX-XXXX">
+							<small><?php esc_html_e('Attached to the manifest fetch and the download URL.', 'ridefleet-ai-chatbot'); ?></small>
+						</label>
 					</div>
 				</section>
 

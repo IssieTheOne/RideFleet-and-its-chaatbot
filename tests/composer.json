@@ -1,0 +1,20 @@
+{
+    "name": "ridefleet/tests",
+    "description": "Smoke tests for RideFleet plugins.",
+    "type": "project",
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "brain/monkey": "^2.6"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RideFleetAIChatbot\\": "../ridefleet-ai-chatbot/includes/",
+            "RideFleetBooking\\": "../ridefleet-booking/includes/"
+        }
+    }
+}

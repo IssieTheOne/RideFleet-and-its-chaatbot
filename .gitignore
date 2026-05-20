@@ -6,9 +6,11 @@
 
 # …then explicitly allow the things we want to track.
 !/.gitignore
+!/.github
 !/README.md
 !/ridefleet-ai-chatbot
 !/ridefleet-booking
+!/tests
 
 # Common artifacts inside the tracked plugin folders.
 **/node_modules/

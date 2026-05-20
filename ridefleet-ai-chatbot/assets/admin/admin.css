@@ -862,6 +862,129 @@
 	border-radius: 10px;
 }
 
+/* ─── Error log rows ───────────────────────────────────────────── */
+
+.rfac-error-list {
+	display: grid;
+	gap: 8px;
+}
+
+.rfac-error-row {
+	padding: 12px 16px;
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-left: 4px solid #94a3b8;
+	border-radius: 8px;
+}
+
+.rfac-error-row.rfac-error-critical { border-left-color: #b91c1c; background: #fef2f2; }
+.rfac-error-row.rfac-error-error    { border-left-color: #dc2626; }
+.rfac-error-row.rfac-error-warning  { border-left-color: #d97706; }
+.rfac-error-row.rfac-error-info     { border-left-color: #0369a1; }
+
+.rfac-error-row header {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	margin-bottom: 6px;
+	flex-wrap: wrap;
+}
+
+.rfac-error-row header time {
+	margin-left: auto;
+	font-size: 11px;
+	color: #94a3b8;
+}
+
+.rfac-error-level {
+	display: inline-flex;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.rfac-error-level-critical { background: #fee2e2; color: #b91c1c; }
+.rfac-error-level-error    { background: #fee2e2; color: #991b1b; }
+.rfac-error-level-warning  { background: #fef3c7; color: #b45309; }
+.rfac-error-level-info     { background: #dbeafe; color: #1d4ed8; }
+
+.rfac-error-source {
+	font-size: 12px;
+	font-weight: 600;
+	color: #475569;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	padding: 2px 8px;
+	background: #f1f5f9;
+	border-radius: 6px;
+}
+
+.rfac-error-message {
+	font-size: 13px;
+	line-height: 1.5;
+	color: #1e293b;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.rfac-error-row details {
+	margin-top: 8px;
+	font-size: 12px;
+}
+
+.rfac-error-row details summary {
+	cursor: pointer;
+	color: #0f766e;
+	font-weight: 600;
+}
+
+.rfac-error-row details pre {
+	margin: 8px 0 0;
+	padding: 10px;
+	background: #f1f5f9;
+	border-radius: 6px;
+	overflow-x: auto;
+	font-size: 11px;
+}
+
+/* ─── Privacy page ─────────────────────────────────────────────── */
+
+.rfac-privacy-match {
+	margin-top: 18px;
+	padding: 16px;
+	background: #fffbeb;
+	border: 1px solid #fcd34d;
+	border-radius: 10px;
+}
+
+.rfac-privacy-match h3 {
+	color: #78350f;
+}
+
+.rfac-privacy-summary {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	padding: 10px 14px;
+	background: #ffffff;
+	border: 1px solid #fcd34d;
+	border-radius: 8px;
+	margin-top: 10px;
+}
+
+.rfac-privacy-summary span {
+	font-size: 13px;
+	color: #475569;
+}
+
+.rfac-privacy-summary strong {
+	color: #b45309;
+	font-size: 18px;
+	display: block;
+}
+
 /* ─── Responsive ──────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {

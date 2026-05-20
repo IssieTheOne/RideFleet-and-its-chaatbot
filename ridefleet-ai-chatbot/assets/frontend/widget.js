@@ -1,24 +1,32 @@
 (function () {
 	'use strict';
 
+	function getStoredSessionId() {
+		try {
+			return window.localStorage ? String(window.localStorage.getItem('rfacSessionId') || '') : '';
+		} catch (error) {
+			return '';
+		}
+	}
+
+	function setStoredSessionId(value) {
+		window.rfacSessionId = value || '';
+		try {
+			if (window.localStorage) {
+				if (value) {
+					window.localStorage.setItem('rfacSessionId', value);
+				} else {
+					window.localStorage.removeItem('rfacSessionId');
+				}
+			}
+		} catch (error) {}
+	}
+
 	function getSessionId() {
 		if (!window.rfacSessionId) {
-			var stored = '';
-			try {
-				stored = window.localStorage ? String(window.localStorage.getItem('rfacSessionId') || '') : '';
-			} catch (error) {
-				stored = '';
-			}
-
-			window.rfacSessionId = stored || 'rfac_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-			try {
-				if (window.localStorage) {
-					window.localStorage.setItem('rfacSessionId', window.rfacSessionId);
-				}
-			} catch (error) {}
+			window.rfacSessionId = getStoredSessionId();
 		}
-
-		return window.rfacSessionId;
+		return window.rfacSessionId || '';
 	}
 
 	function escapeHtml(value) {
@@ -260,6 +268,34 @@
 			}, 180);
 		}
 
+		function trapFocus(event) {
+			if (windowEl.hidden || event.key !== 'Tab') {
+				return;
+			}
+			var focusable = windowEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+			if (!focusable.length) return;
+			var first = focusable[0];
+			var last = focusable[focusable.length - 1];
+			if (event.shiftKey && document.activeElement === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && document.activeElement === last) {
+				event.preventDefault();
+				first.focus();
+			}
+		}
+
+		document.addEventListener('keydown', function (event) {
+			if (windowEl.hidden) return;
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				closeWidget();
+				bubble.focus();
+			} else {
+				trapFocus(event);
+			}
+		});
+
 		bubble.addEventListener('click', function (event) {
 			event.preventDefault();
 			openWidget();
@@ -277,12 +313,7 @@
 				if (!window.confirm('Start a new conversation? Your current chat will be cleared.')) {
 					return;
 				}
-				try {
-					if (window.localStorage) {
-						window.localStorage.removeItem('rfacSessionId');
-					}
-				} catch (err) {}
-				window.rfacSessionId = '';
+				setStoredSessionId('');
 				while (messages.firstChild) {
 					messages.removeChild(messages.firstChild);
 				}
@@ -512,6 +543,9 @@
 					});
 				})
 				.then(function (payload) {
+					if (payload.session_id) {
+						setStoredSessionId(payload.session_id);
+					}
 					appendMessage(messages, payload.message || 'I can help you book a taxi ride.', 'bot');
 					appendInfoCard(messages, payload);
 					appendActionCard(messages, payload, closeWidget, sendText);
@@ -523,12 +557,7 @@
 						}, 700);
 					}
 					if (payload.state === 'halted') {
-						window.rfacSessionId = '';
-						try {
-							if (window.localStorage) {
-								window.localStorage.removeItem('rfacSessionId');
-							}
-						} catch (error) {}
+						setStoredSessionId('');
 					}
 				})
 				.catch(function (error) {

@@ -64,7 +64,7 @@ final class Widget {
 				<span class="rfac-bubble-label"><?php esc_html_e('Book a ride', 'ridefleet-ai-chatbot'); ?></span>
 			</button>
 
-			<section class="rfac-window" aria-label="<?php esc_attr_e('Taxi booking chat', 'ridefleet-ai-chatbot'); ?>" hidden>
+			<section class="rfac-window" role="dialog" aria-modal="true" aria-labelledby="rfac-dialog-title" aria-label="<?php esc_attr_e('Taxi booking chat', 'ridefleet-ai-chatbot'); ?>" hidden>
 				<header class="rfac-header">
 					<div class="rfac-header-info">
 						<div class="rfac-avatar" aria-hidden="true">
@@ -75,7 +75,7 @@ final class Widget {
 							</svg>
 						</div>
 						<div>
-							<strong><?php esc_html_e('RideFleet Booking', 'ridefleet-ai-chatbot'); ?></strong>
+							<strong id="rfac-dialog-title"><?php esc_html_e('RideFleet Booking', 'ridefleet-ai-chatbot'); ?></strong>
 							<span><?php esc_html_e('Taxi reservations', 'ridefleet-ai-chatbot'); ?> <i class="rfac-online-dot" aria-hidden="true"></i></span>
 						</div>
 					</div>
@@ -96,7 +96,7 @@ final class Widget {
 					<span class="rfac-progress-step"><i></i><b><?php esc_html_e('Done', 'ridefleet-ai-chatbot'); ?></b></span>
 				</div>
 
-				<div class="rfac-messages" data-rfac-messages data-rfac-default-greeting="<?php esc_attr_e('Hi! I can book your taxi ride. Where should we pick you up? Start typing your address and I will suggest matches.', 'ridefleet-ai-chatbot'); ?>">
+				<div class="rfac-messages" data-rfac-messages role="log" aria-live="polite" aria-relevant="additions text" data-rfac-default-greeting="<?php esc_attr_e('Hi! I can book your taxi ride. Where should we pick you up? Start typing your address and I will suggest matches.', 'ridefleet-ai-chatbot'); ?>">
 					<div class="rfac-message rfac-message-bot"><?php esc_html_e('Hi! I can book your taxi ride. Where should we pick you up? Start typing your address and I will suggest matches.', 'ridefleet-ai-chatbot'); ?></div>
 				</div>
 

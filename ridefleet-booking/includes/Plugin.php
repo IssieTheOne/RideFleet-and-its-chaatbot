@@ -15,6 +15,8 @@ use RideFleetBooking\Frontend\Shortcodes;
 use RideFleetBooking\Integrations\GoogleMaps;
 use RideFleetBooking\Integrations\WooCommerce;
 use RideFleetBooking\Rest\Routes;
+use RideFleetBooking\Support\Options;
+use RideFleetBooking\Support\UpdateChecker;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -51,5 +53,16 @@ final class Plugin {
 		Routes::register_hooks();
 		GoogleMaps::register_hooks();
 		WooCommerce::register_hooks();
+
+		$update_endpoint = (string) Options::get('update_endpoint', '');
+		if ('' !== $update_endpoint) {
+			(new UpdateChecker(
+				'ridefleet-booking',
+				plugin_basename(RFB_PLUGIN_FILE),
+				RFB_VERSION,
+				$update_endpoint,
+				(string) Options::get('license_key', '')
+			))->register();
+		}
 	}
 }

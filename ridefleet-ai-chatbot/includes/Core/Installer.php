@@ -54,6 +54,8 @@ final class Installer {
 		$messages = $wpdb->prefix . 'rfac_chat_messages';
 		$bookings = $wpdb->prefix . 'rfac_booking_events';
 		$change_requests = $wpdb->prefix . 'rfac_change_requests';
+		$errors = $wpdb->prefix . 'rfac_error_log';
+		$usage = $wpdb->prefix . 'rfac_ai_usage';
 
 		dbDelta(
 			"CREATE TABLE {$sessions} (
@@ -138,6 +140,37 @@ final class Installer {
 			) {$charset};"
 		);
 
+		dbDelta(
+			"CREATE TABLE {$errors} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				session_id bigint(20) unsigned NULL,
+				level varchar(20) NOT NULL DEFAULT 'error',
+				source varchar(60) NOT NULL DEFAULT '',
+				message text NOT NULL,
+				context longtext NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY level (level),
+				KEY source (source),
+				KEY created_at (created_at)
+			) {$charset};"
+		);
+
+		dbDelta(
+			"CREATE TABLE {$usage} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				day date NOT NULL,
+				ip_hash varchar(64) NOT NULL DEFAULT '',
+				tokens_in int unsigned NOT NULL DEFAULT 0,
+				tokens_out int unsigned NOT NULL DEFAULT 0,
+				requests int unsigned NOT NULL DEFAULT 0,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY day_ip (day, ip_hash),
+				KEY day (day)
+			) {$charset};"
+		);
+
 		update_option('rfac_db_version', RFAC_VERSION);
 	}
 
@@ -171,6 +204,11 @@ final class Installer {
 			'data_retention_days' => 90,
 			'notification_email' => '',
 			'notifications_enabled' => 1,
+			'ai_daily_token_budget' => 250000,
+			'ai_per_ip_daily_cap' => 200,
+			'session_signing_secret' => '',
+			'update_endpoint' => '',
+			'license_key' => '',
 			'chatbot_ui_theme' => [
 				'primary' => '#0f766e',
 				'primary_dark' => '#0b5f59',

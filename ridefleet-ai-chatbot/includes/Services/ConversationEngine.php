@@ -147,10 +147,41 @@ final class ConversationEngine {
 		if ('' !== $coupon) {
 			$data = $session['collected_data'];
 			$data['coupon_code'] = $coupon;
+
+			// Round-trip validation against the booking plugin so we can tell the
+			// user "applied" or "rejected" immediately instead of at booking time.
+			$subtotal = (float) ($session['last_quote']['final_price'] ?? 0);
+			$validation = $this->core->validate_coupon($coupon, $subtotal);
+			if (!empty($validation['valid'])) {
+				$coupon_info = [
+					'code' => $coupon,
+					'status' => 'applied',
+					'amount' => (float) ($validation['amount'] ?? 0),
+				];
+				$session['validation_error'] = sprintf(
+					__('Coupon %1$s applied: −%2$s %3$.2f off the quote.', 'ridefleet-ai-chatbot'),
+					$coupon,
+					(string) ($session['last_quote']['currency'] ?? 'USD'),
+					(float) ($validation['amount'] ?? 0)
+				);
+			} else {
+				$coupon_info = [
+					'code' => $coupon,
+					'status' => 'rejected',
+					'message' => (string) ($validation['message'] ?? ''),
+				];
+				unset($data['coupon_code']);
+				$session['validation_error'] = sprintf(
+					__('Coupon %1$s could not be applied. %2$s', 'ridefleet-ai-chatbot'),
+					$coupon,
+					(string) ($validation['message'] ?? __('It may be expired, invalid, or fully used.', 'ridefleet-ai-chatbot'))
+				);
+			}
+
 			$session['collected_data'] = $data;
-			if (!empty($session['last_quote']) && empty($session['last_quote']['coupon'])) {
+			if (!empty($session['last_quote'])) {
 				$last_quote = $session['last_quote'];
-				$last_quote['coupon'] = ['code' => $coupon, 'status' => 'pending_validation'];
+				$last_quote['coupon'] = $coupon_info;
 				$session['last_quote'] = $last_quote;
 			}
 		}
