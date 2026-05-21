@@ -17,16 +17,23 @@ if (!defined('ABSPATH')) {
 
 final class Admin {
 	private const POPULAR_MODELS = [
+		// OpenAI
 		'openai/gpt-4o-mini',
 		'openai/gpt-4o',
+		// Anthropic
 		'anthropic/claude-3-5-haiku',
 		'anthropic/claude-3-5-sonnet',
+		'anthropic/claude-3-7-sonnet',
+		// Google Gemini (current slugs as of 2025)
+		'google/gemini-2.0-flash-001',
+		'google/gemini-2.5-flash-preview:thinking',
+		'google/gemini-2.5-pro-preview',
+		// Meta Llama
 		'meta-llama/llama-3.1-8b-instruct',
-		'meta-llama/llama-3.1-70b-instruct',
+		'meta-llama/llama-3.3-70b-instruct',
+		// Mistral
 		'mistralai/mistral-7b-instruct',
-		'mistralai/mixtral-8x7b-instruct',
-		'google/gemini-flash-1.5',
-		'google/gemini-pro-1.5',
+		'mistralai/mistral-small-3.1-24b-instruct',
 	];
 
 	public static function register_hooks(): void {
