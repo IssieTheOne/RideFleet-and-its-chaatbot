@@ -8,6 +8,7 @@
 !/.gitignore
 !/.github
 !/README.md
+!/DEVLOG.md
 !/ridefleet-ai-chatbot
 !/ridefleet-booking
 !/tests
