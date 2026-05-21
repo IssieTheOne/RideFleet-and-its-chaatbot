@@ -136,9 +136,22 @@
 		closeButton.textContent = 'Close chat';
 		closeButton.addEventListener('click', closeWidget);
 
+		var collected = (payload.data && payload.data.collected) || {};
+		var hasRoute = collected.pickup_address && collected.dropoff_address;
+
+		var returnButton = document.createElement('button');
+		returnButton.type = 'button';
+		returnButton.className = 'rfac-action-button rfac-action-button-primary';
+		returnButton.textContent = 'Book return trip';
+		returnButton.style.display = hasRoute ? '' : 'none';
+		returnButton.addEventListener('click', function () {
+			sendText('I would like to book the return trip');
+			card.remove();
+		});
+
 		var newButton = document.createElement('button');
 		newButton.type = 'button';
-		newButton.className = 'rfac-action-button rfac-action-button-primary';
+		newButton.className = 'rfac-action-button';
 		newButton.textContent = 'New booking';
 		newButton.addEventListener('click', function () {
 			sendText('new booking');
@@ -146,6 +159,7 @@
 		});
 
 		row.appendChild(closeButton);
+		if (hasRoute) { row.appendChild(returnButton); }
 		row.appendChild(newButton);
 		container.appendChild(card);
 		container.scrollTop = container.scrollHeight;
@@ -393,12 +407,6 @@
 				});
 			} else if (state === 'capture_extras') {
 				replies = [{ label: 'No extras, continue', value: 'no extras' }];
-			} else if (state === 'complete') {
-				replies = [
-					{ label: 'Book return trip', value: 'I would like to book the return trip', primary: true },
-					{ label: 'New booking', value: 'new booking' },
-					{ label: 'Modify this booking', value: 'I want to change my booking' }
-				];
 			} else {
 				var msg = String(payload && payload.message || '').trim();
 				if (/\?\s*$/.test(msg) && /^(do|does|did|is|are|was|were|will|would|can|could|should|shall|may|might|have|has|had)\s/i.test(msg)) {

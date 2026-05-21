@@ -887,6 +887,17 @@ final class ConversationEngine {
 		}
 
 		if ($existing && !$this->asks_language_support($message)) {
+			// In complete state, allow the language to follow the customer's new message
+			// so a Dutch-completed session doesn't keep replying in Dutch to a fresh English user.
+			$state = (string) ($session['state'] ?? '');
+			if ('complete' === $state
+				&& in_array($remote, ['en', 'fr', 'nl'], true)
+				&& 'unknown' !== $remote
+				&& $remote !== $existing
+			) {
+				return $remote;
+			}
+
 			return $existing;
 		}
 
