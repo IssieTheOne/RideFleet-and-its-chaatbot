@@ -40,57 +40,122 @@ final class FlightTrackerPage {
         'ET'=>'Ethiopian Airlines','SA'=>'South African','MS'=>'EgyptAir',
         'AT'=>'Royal Air Maroc','RJ'=>'Royal Jordanian','GF'=>'Gulf Air',
         'WY'=>'Oman Air','SV'=>'Saudi Arabian','FZ'=>'flydubai','G9'=>'Air Arabia',
+        // Regional / commuter carriers
+        '9E'=>'Delta Connection','OH'=>'PSA Airlines','MQ'=>'Envoy Air',
+        'OO'=>'SkyWest Airlines','YV'=>'Mesa Airlines','ZW'=>'Air Wisconsin',
+        'CP'=>'Compass Airlines','G7'=>'GoJet Airlines','C5'=>'Champlain Enterprises',
+        'PT'=>'Piedmont Airlines',
+        'WS'=>'WestJet','PD'=>'Porter Airlines','F9'=>'Frontier Airlines',
+        'NK'=>'Spirit Airlines','SY'=>'Sun Country Airlines','G4'=>'Allegiant Air',
+        'HA'=>'Hawaiian Airlines','VX'=>'Virgin America','XP'=>'Avelo Airlines',
+        'UP'=>'Bahamas Air','FL'=>'AirTran',
     ];
 
     private const AIRPORTS = [
+        // North America — US
+        'JFK'=>['name'=>'John F. Kennedy','city'=>'New York-JFK'],
+        'LGA'=>['name'=>'LaGuardia','city'=>'New York-LGA'],
+        'EWR'=>['name'=>'Newark Liberty','city'=>'Newark'],
+        'BOS'=>['name'=>'Logan International','city'=>'Boston'],
+        'PHL'=>['name'=>'Philadelphia International','city'=>'Philadelphia'],
+        'DCA'=>['name'=>'Reagan National','city'=>'Washington DC'],
+        'IAD'=>['name'=>'Dulles International','city'=>'Washington-Dulles'],
+        'BWI'=>['name'=>'BWI Airport','city'=>'Baltimore'],
+        'CLT'=>['name'=>'Charlotte Douglas','city'=>'Charlotte'],
+        'ATL'=>['name'=>'Hartsfield-Jackson','city'=>'Atlanta'],
+        'MCO'=>['name'=>'Orlando International','city'=>'Orlando'],
+        'MIA'=>['name'=>'Miami International','city'=>'Miami'],
+        'FLL'=>['name'=>'Fort Lauderdale-Hollywood','city'=>'Fort Lauderdale'],
+        'TPA'=>['name'=>'Tampa International','city'=>'Tampa'],
+        'ORD'=>['name'=>"O'Hare International",'city'=>'Chicago-ORD'],
+        'MDW'=>['name'=>'Midway International','city'=>'Chicago-Midway'],
+        'DTW'=>['name'=>'Detroit Metropolitan','city'=>'Detroit'],
+        'MSP'=>['name'=>'Minneapolis-St. Paul','city'=>'Minneapolis'],
+        'DFW'=>['name'=>'Dallas/Fort Worth','city'=>'Dallas-DFW'],
+        'DAL'=>['name'=>'Dallas Love Field','city'=>'Dallas-Love'],
+        'IAH'=>['name'=>'George Bush Intercontinental','city'=>'Houston-IAH'],
+        'HOU'=>['name'=>'Hobby Airport','city'=>'Houston-Hobby'],
+        'DEN'=>['name'=>'Denver International','city'=>'Denver'],
+        'PHX'=>['name'=>'Phoenix Sky Harbor','city'=>'Phoenix'],
+        'LAS'=>['name'=>'Harry Reid International','city'=>'Las Vegas'],
+        'LAX'=>['name'=>'Los Angeles International','city'=>'Los Angeles'],
+        'SFO'=>['name'=>'San Francisco International','city'=>'San Francisco'],
+        'SJC'=>['name'=>'San José International','city'=>'San Jose'],
+        'SEA'=>['name'=>'Seattle-Tacoma','city'=>'Seattle'],
+        'PDX'=>['name'=>'Portland International','city'=>'Portland'],
+        'BTV'=>['name'=>'Burlington International','city'=>'Burlington, VT'],
+        'ALB'=>['name'=>'Albany International','city'=>'Albany, NY'],
+        'PVD'=>['name'=>'T.F. Green','city'=>'Providence, RI'],
+        'MHT'=>['name'=>'Manchester-Boston Regional','city'=>'Manchester, NH'],
+        'BUF'=>['name'=>'Buffalo Niagara','city'=>'Buffalo, NY'],
+        'ROC'=>['name'=>'Greater Rochester','city'=>'Rochester, NY'],
+        'SYR'=>['name'=>'Hancock International','city'=>'Syracuse, NY'],
+        'RIC'=>['name'=>'Richmond International','city'=>'Richmond, VA'],
+        'ORF'=>['name'=>'Norfolk International','city'=>'Norfolk, VA'],
+        'CHS'=>['name'=>'Charleston International','city'=>'Charleston, SC'],
+        'SAV'=>['name'=>'Savannah/Hilton Head','city'=>'Savannah, GA'],
+        'JAX'=>['name'=>'Jacksonville International','city'=>'Jacksonville, FL'],
+        // North America — Canada
+        'YYZ'=>['name'=>'Toronto Pearson','city'=>'Toronto'],
+        'YUL'=>['name'=>'Montréal-Trudeau','city'=>'Montreal'],
+        'YVR'=>['name'=>'Vancouver International','city'=>'Vancouver'],
+        'YYC'=>['name'=>'Calgary International','city'=>'Calgary'],
+        // Europe
         'BRU'=>['name'=>'Brussels Airport','city'=>'Brussels'],
-        'AMS'=>['name'=>'Schiphol Airport','city'=>'Amsterdam'],
-        'CDG'=>['name'=>'Charles de Gaulle','city'=>'Paris'],
-        'LHR'=>['name'=>'Heathrow','city'=>'London'],
-        'LGW'=>['name'=>'Gatwick','city'=>'London'],
+        'AMS'=>['name'=>'Schiphol','city'=>'Amsterdam'],
+        'CDG'=>['name'=>'Charles de Gaulle','city'=>'Paris-CDG'],
+        'ORY'=>['name'=>'Orly','city'=>'Paris-Orly'],
+        'LHR'=>['name'=>'Heathrow','city'=>'London-LHR'],
+        'LGW'=>['name'=>'Gatwick','city'=>'London-Gatwick'],
+        'STN'=>['name'=>'Stansted','city'=>'London-Stansted'],
         'FRA'=>['name'=>'Frankfurt Airport','city'=>'Frankfurt'],
         'MUC'=>['name'=>'Munich Airport','city'=>'Munich'],
+        'DUS'=>['name'=>'Düsseldorf Airport','city'=>'Düsseldorf'],
+        'HAM'=>['name'=>'Hamburg Airport','city'=>'Hamburg'],
+        'BER'=>['name'=>'Brandenburg Airport','city'=>'Berlin'],
+        'STR'=>['name'=>'Stuttgart Airport','city'=>'Stuttgart'],
         'VIE'=>['name'=>'Vienna Airport','city'=>'Vienna'],
         'ZRH'=>['name'=>'Zürich Airport','city'=>'Zürich'],
+        'GVA'=>['name'=>'Geneva Airport','city'=>'Geneva'],
         'BCN'=>['name'=>'El Prat','city'=>'Barcelona'],
         'MAD'=>['name'=>'Barajas','city'=>'Madrid'],
         'FCO'=>['name'=>'Fiumicino','city'=>'Rome'],
         'MXP'=>['name'=>'Malpensa','city'=>'Milan'],
+        'LIN'=>['name'=>'Linate','city'=>'Milan-Linate'],
+        'BLQ'=>['name'=>'Guglielmo Marconi','city'=>'Bologna'],
+        'NCE'=>['name'=>"Côte d'Azur",'city'=>'Nice'],
+        'MRS'=>['name'=>'Provence Airport','city'=>'Marseille'],
+        'LYS'=>['name'=>'Saint-Exupéry','city'=>'Lyon'],
+        'TLS'=>['name'=>'Blagnac','city'=>'Toulouse'],
         'ATH'=>['name'=>'Eleftherios Venizelos','city'=>'Athens'],
         'IST'=>['name'=>'Istanbul Airport','city'=>'Istanbul'],
-        'DXB'=>['name'=>'Dubai International','city'=>'Dubai'],
-        'DOH'=>['name'=>'Hamad International','city'=>'Doha'],
-        'JFK'=>['name'=>'John F. Kennedy','city'=>'New York'],
-        'LAX'=>['name'=>'LAX','city'=>'Los Angeles'],
-        'ORD'=>['name'=>"O'Hare International",'city'=>'Chicago'],
-        'SYD'=>['name'=>'Kingsford Smith','city'=>'Sydney'],
-        'SIN'=>['name'=>'Changi Airport','city'=>'Singapore'],
-        'HKG'=>['name'=>'Hong Kong International','city'=>'Hong Kong'],
-        'NRT'=>['name'=>'Narita International','city'=>'Tokyo'],
-        'ICN'=>['name'=>'Incheon International','city'=>'Seoul'],
+        'SAW'=>['name'=>'Sabiha Gökçen','city'=>'Istanbul-Asian'],
         'DUB'=>['name'=>'Dublin Airport','city'=>'Dublin'],
         'LIS'=>['name'=>'Humberto Delgado','city'=>'Lisbon'],
         'CPH'=>['name'=>'Kastrup','city'=>'Copenhagen'],
         'ARN'=>['name'=>'Arlanda','city'=>'Stockholm'],
         'HEL'=>['name'=>'Helsinki Airport','city'=>'Helsinki'],
+        'OSL'=>['name'=>'Oslo Gardermoen','city'=>'Oslo'],
         'WAW'=>['name'=>'Chopin Airport','city'=>'Warsaw'],
         'PRG'=>['name'=>'Václav Havel','city'=>'Prague'],
         'BUD'=>['name'=>'Liszt Ferenc','city'=>'Budapest'],
-        'BUH'=>['name'=>'Henri Coandă','city'=>'Bucharest'],
+        'OTP'=>['name'=>'Henri Coandă','city'=>'Bucharest'],
         'SOF'=>['name'=>'Sofia Airport','city'=>'Sofia'],
-        'LJU'=>['name'=>'Jože Pučnik','city'=>'Ljubljana'],
-        'ZAG'=>['name'=>'Franjo Tuđman','city'=>'Zagreb'],
         'LUX'=>['name'=>'Luxembourg Airport','city'=>'Luxembourg'],
-        'GVA'=>['name'=>'Geneva Airport','city'=>'Geneva'],
-        'BLQ'=>['name'=>'Guglielmo Marconi','city'=>'Bologna'],
-        'MRS'=>['name'=>'Provence Airport','city'=>'Marseille'],
-        'NCE'=>['name'=>"Côte d'Azur",'city'=>'Nice'],
-        'TLS'=>['name'=>'Blagnac','city'=>'Toulouse'],
-        'LYS'=>['name'=>'Saint-Exupéry','city'=>'Lyon'],
-        'HAM'=>['name'=>'Hamburg Airport','city'=>'Hamburg'],
-        'DUS'=>['name'=>'Düsseldorf Airport','city'=>'Düsseldorf'],
-        'STR'=>['name'=>'Stuttgart Airport','city'=>'Stuttgart'],
-        'BER'=>['name'=>'Brandenburg Airport','city'=>'Berlin'],
+        // Middle East & Asia
+        'DXB'=>['name'=>'Dubai International','city'=>'Dubai'],
+        'AUH'=>['name'=>'Abu Dhabi International','city'=>'Abu Dhabi'],
+        'DOH'=>['name'=>'Hamad International','city'=>'Doha'],
+        'RUH'=>['name'=>'King Khalid International','city'=>'Riyadh'],
+        'SIN'=>['name'=>'Changi Airport','city'=>'Singapore'],
+        'HKG'=>['name'=>'Hong Kong International','city'=>'Hong Kong'],
+        'NRT'=>['name'=>'Narita International','city'=>'Tokyo-Narita'],
+        'HND'=>['name'=>'Haneda Airport','city'=>'Tokyo-Haneda'],
+        'ICN'=>['name'=>'Incheon International','city'=>'Seoul'],
+        'PVG'=>['name'=>'Pudong International','city'=>'Shanghai'],
+        'PEK'=>['name'=>'Beijing Capital','city'=>'Beijing'],
+        'SYD'=>['name'=>'Kingsford Smith','city'=>'Sydney'],
+        'MEL'=>['name'=>'Melbourne Airport','city'=>'Melbourne'],
     ];
 
     public static function render(): void {
@@ -312,14 +377,22 @@ final class FlightTrackerPage {
                             $airline_name = self::AIRLINES[$airline_code] ?? $airline_code;
 
                             // Strip the airline prefix from flight_iata to get just the number
-                            $raw_fnum = (string)($f['flight_iata'] ?? $f['flight_icao'] ?? '');
-                            $flight_number = preg_replace('/^[A-Z0-9]{2,3}(?=\d)/i', '', $raw_fnum);
-                            if (!$flight_number) $flight_number = $raw_fnum ?: '—';
+                            $raw_fnum = strtoupper((string)($f['flight_iata'] ?? $f['flight_icao'] ?? ''));
+                            // Strip the airline IATA code prefix (always exactly 2 chars) to get just the numeric/flight number
+                            if ($airline_code !== '' && str_starts_with($raw_fnum, $airline_code)) {
+                                $flight_number = substr($raw_fnum, strlen($airline_code));
+                            } else {
+                                // fallback: strip a 2-char letter-only prefix (e.g. "DL" from "DL357")
+                                $flight_number = preg_replace('/^[A-Z]{2}(?=\d)/i', '', $raw_fnum);
+                            }
+                            if ('' === $flight_number || $flight_number === $raw_fnum) {
+                                $flight_number = $raw_fnum ?: '—';
+                            }
 
                             $other_iata   = strtoupper((string)('arr'===$type ? ($f['dep_iata']??'—') : ($f['arr_iata']??'—')));
                             $other_info   = self::AIRPORTS[$other_iata] ?? null;
                             $sched_t      = 'arr'===$type ? (string)($f['arr_time']??'') : (string)($f['dep_time']??'');
-                            $sched_disp   = $sched_t ? wp_date('H:i', strtotime($sched_t)) : '—';
+                            $sched_disp   = $sched_t ? wp_date('g:i A', strtotime($sched_t)) : '—';
                             $delay        = (int)('arr'===$type ? ($f['arr_delayed']??0) : ($f['dep_delayed']??0));
                             $sched_ts     = $f['_ts'] ?? 0;
                             $gate         = (string)('arr'===$type ? ($f['arr_gate']??'') : ($f['dep_gate']??''));
@@ -327,10 +400,10 @@ final class FlightTrackerPage {
                             // Actual time calculation
                             if ($sched_ts > 0 && $delay !== 0) {
                                 $actual_ts    = $sched_ts + ($delay * 60);
-                                $actual_disp  = wp_date('H:i', $actual_ts);
+                                $actual_disp  = wp_date('g:i A', $actual_ts);
                                 $actual_class = $delay < 0 ? 'rfb-fids-actual--early' : 'rfb-fids-actual--late';
                             } elseif ($sched_ts > 0) {
-                                $actual_disp  = wp_date('H:i', $sched_ts);
+                                $actual_disp  = wp_date('g:i A', $sched_ts);
                                 $actual_class = 'rfb-fids-actual--ontime';
                             } else {
                                 $actual_disp  = '—';
@@ -354,9 +427,15 @@ final class FlightTrackerPage {
                             } else {
                                 $remark = __('On Time', 'ridefleet-booking'); $remark_class = 'rfb-remark--ontime';
                             }
-                            // Override remark for past/landed
+                            // For clearly past flights with no terminal API status, mark as landed
+                            // But only if status is not "scheduled" (API may still show scheduled for delayed flights)
                             if ($is_past && !$is_active && 'cancelled' !== $status_lc && 'diverted' !== $status_lc && 'redirected' !== $status_lc) {
-                                $remark = __('Landed', 'ridefleet-booking'); $remark_class = 'rfb-remark--landed';
+                                if ('scheduled' !== $status_lc) {
+                                    // API gave us a concrete terminal status or we have no info — mark landed
+                                    $remark = __('Landed', 'ridefleet-booking'); $remark_class = 'rfb-remark--landed';
+                                }
+                                // If status_lc === 'scheduled', keep the computed remark (On Time / Delayed / Early)
+                                // This handles delayed flights whose scheduled time passed but they haven't landed yet
                             }
 
                             $row_class = 'rfb-fids-row';
@@ -434,10 +513,16 @@ final class FlightTrackerPage {
             foreach ($upcoming as $f) {
                 $airline  = strtoupper((string)($f['airline_iata']??'?'));
                 $aname    = self::AIRLINES[$airline] ?? $airline;
-                $fnum     = (string)($f['flight_iata'] ?? '—');
+                $fnum_raw = strtoupper((string)($f['flight_iata'] ?? ''));
+                $fnum_airline = strtoupper((string)($f['airline_iata'] ?? ''));
+                if ($fnum_airline !== '' && str_starts_with($fnum_raw, $fnum_airline)) {
+                    $fnum = substr($fnum_raw, strlen($fnum_airline));
+                } else {
+                    $fnum = preg_replace('/^[A-Z]{2}(?=\d)/i', '', $fnum_raw) ?: $fnum_raw ?: '—';
+                }
                 $from     = strtoupper((string)($f['dep_iata']??'—'));
                 $city     = self::AIRPORTS[$from]['city'] ?? $from;
-                $time     = wp_date('H:i', strtotime((string)($f['arr_time']??'')));
+                $time     = wp_date('g:i A', strtotime((string)($f['arr_time']??'')));
                 $status   = strtolower((string)($f['status']??'scheduled'));
                 $delay    = (int)($f['arr_delayed']??0);
                 $gate     = (string)($f['arr_gate']??'');

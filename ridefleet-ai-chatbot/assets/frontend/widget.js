@@ -332,6 +332,34 @@
 		rfacScrollToBottom();
 	}
 
+	function maybeShowPaymentLink(data) {
+		if (!data) return;
+		var payUrl = (data.payment_url) || '';
+		if (!payUrl) return;
+
+		var msgs = rfacMessagesEl();
+		if (!msgs) return;
+
+		var ex = document.getElementById('rfac-payment-link');
+		if (ex) ex.remove();
+
+		var wrap = document.createElement('div');
+		wrap.id = 'rfac-payment-link';
+		wrap.style.cssText = 'display:flex;margin:6px 12px 4px;';
+
+		var btn = document.createElement('a');
+		btn.href = payUrl;
+		btn.target = '_blank';
+		btn.rel = 'noopener noreferrer';
+		btn.className = 'rfac-calendar-link';
+		btn.style.cssText = 'background:#0f766e;color:#fff;border-radius:8px;padding:8px 16px;font-weight:700;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;';
+		btn.textContent = '💳 Pay now';
+
+		wrap.appendChild(btn);
+		msgs.appendChild(wrap);
+		rfacScrollToBottom();
+	}
+
 	function debounce(fn, ms) {
 		var timer;
 		return function () {
@@ -732,6 +760,7 @@
 					scheduleIdleNudge(rfacCurrentState);
 					if (payload.state === 'complete') {
 						maybeShowCalendarLink(payload.data);
+						maybeShowPaymentLink(payload.data);
 					}
 					appendMessage(messages, payload.message || 'I can help you book a taxi ride.', 'bot');
 					// Show route summary once both locations are known

@@ -109,52 +109,38 @@
 .rfac-stats {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-	gap: 12px;
-	margin-bottom: 20px;
+	gap: 16px;
+	margin-bottom: 24px;
 }
 
 .rfac-stat {
-	position: relative;
-	padding: 16px 18px;
-	background: linear-gradient(135deg, #ffffff, #f0fdf9);
-	border: 1px solid #cbfbf1;
-	border-left: 4px solid #0f766e;
-	border-radius: 10px;
-	transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-
-.rfac-stat:hover {
-	transform: translateY(-1px);
-	box-shadow: 0 6px 18px rgba(15, 118, 110, 0.08);
+	background: #fff;
+	border: 1px solid #e2e8f0;
+	border-radius: 12px;
+	padding: 20px 22px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
 }
 
 .rfac-stat-label {
-	display: block;
-	color: #64748b;
 	font-size: 11px;
 	font-weight: 700;
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	margin-bottom: 4px;
+	letter-spacing: .08em;
+	color: #0f766e;
 }
 
 .rfac-stat-value {
-	display: block;
-	color: #0f766e;
 	font-size: 30px;
 	font-weight: 800;
+	color: #0f172a;
 	line-height: 1.1;
+	font-variant-numeric: tabular-nums;
 }
 
-.rfac-stat-pending {
-	background: linear-gradient(135deg, #ffffff, #fef3c7);
-	border-color: #fcd34d;
-	border-left-color: #d97706;
-}
-
-.rfac-stat-pending .rfac-stat-value {
-	color: #b45309;
-}
+.rfac-stat-pending .rfac-stat-label { color: #b45309; }
+.rfac-stat-pending { border-color: #fde68a; background: #fffbeb; }
 
 /* ─── Test buttons / status ────────────────────────────────────── */
 

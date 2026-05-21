@@ -217,6 +217,8 @@ final class Installer {
 			'service_area_radius_km' => 100,
 			'fast_model' => '',
 			'quality_model' => '',
+			'stripe_secret_key' => '',
+			'stripe_payment_link_enabled' => 0,
 			'chatbot_ui_theme' => [
 				'primary' => '#0f766e',
 				'primary_dark' => '#0b5f59',

@@ -51,6 +51,8 @@ final class Options {
 			'service_area_radius_km',
 			'fast_model',
 			'quality_model',
+			'stripe_secret_key',
+			'stripe_payment_link_enabled',
 		];
 
 		$next = $current;

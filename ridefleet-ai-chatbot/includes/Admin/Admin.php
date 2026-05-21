@@ -231,6 +231,8 @@ final class Admin {
 				'service_area_radius_km'=> max(1, absint($_POST['service_area_radius_km'] ?? 100)),
 				'fast_model'    => sanitize_text_field(wp_unslash($_POST['fast_model'] ?? '')),
 				'quality_model' => sanitize_text_field(wp_unslash($_POST['quality_model'] ?? '')),
+				'stripe_secret_key'           => sanitize_text_field(wp_unslash($_POST['rfac_stripe_secret_key'] ?? '')),
+				'stripe_payment_link_enabled' => !empty($_POST['rfac_stripe_payment_link_enabled']) ? 1 : 0,
 			]
 		);
 
@@ -699,7 +701,23 @@ foreach ( $faq_items as $idx => $item ) :
 					</button>
 				</div>
 
-				<p class="submit">
+				<!-- Stripe Payment Links -->
+				<section class="rfac-panel rfac-panel-wide" style="margin-top:18px;">
+					<p class="rfac-kicker"><?php esc_html_e('Payments', 'ridefleet-ai-chatbot'); ?></p>
+					<h2>💳 <?php esc_html_e('Stripe Payment Links', 'ridefleet-ai-chatbot'); ?></h2>
+					<p style="color:#64748b;margin-top:0;font-size:13px;"><?php esc_html_e('When enabled, a Stripe Checkout link will be included in the confirmation message so customers can pay immediately.', 'ridefleet-ai-chatbot'); ?></p>
+					<label>
+						<span><?php esc_html_e('Stripe Secret Key', 'ridefleet-ai-chatbot'); ?></span>
+						<input type="password" name="rfac_stripe_secret_key" value="<?php echo esc_attr((string) ($options['stripe_secret_key'] ?? '')); ?>" placeholder="sk_live_..." autocomplete="off">
+						<small><?php esc_html_e('Find this in your Stripe Dashboard → Developers → API Keys. Use a restricted key with Checkout: write permissions.', 'ridefleet-ai-chatbot'); ?></small>
+					</label>
+					<label style="margin-top:10px;">
+						<input type="checkbox" name="rfac_stripe_payment_link_enabled" value="1" <?php checked(!empty($options['stripe_payment_link_enabled'])); ?>>
+						<span style="display:inline;font-weight:600;"><?php esc_html_e('Enable payment link in booking confirmation', 'ridefleet-ai-chatbot'); ?></span>
+					</label>
+				</section>
+
+			<p class="submit">
 					<button class="button button-primary" type="submit"><?php esc_html_e('Save Chatbot Settings', 'ridefleet-ai-chatbot'); ?></button>
 				</p>
 			</form>
