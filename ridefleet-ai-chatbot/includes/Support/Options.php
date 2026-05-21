@@ -51,7 +51,6 @@ final class Options {
 			'service_area_radius_km',
 			'fast_model',
 			'quality_model',
-			'airlabs_api_key',
 		];
 
 		$next = $current;

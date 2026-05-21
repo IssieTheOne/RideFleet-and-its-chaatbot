@@ -279,24 +279,56 @@
 		var dt;
 		try { dt = new Date(String(pickupTime).replace(' ', 'T')); if (isNaN(dt.getTime())) return; } catch(e) { return; }
 		var end = new Date(dt.getTime() + 3600000);
-		function fmt(d) { return d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; }
-		var title = encodeURIComponent('Taxi: ' + pickup + (dropoff ? ' → ' + dropoff : ''));
-		var dates = encodeURIComponent(fmt(dt) + '/' + fmt(end));
-		var details = encodeURIComponent('RideFleet booking' + (bookingId ? ' #' + bookingId : '') + '.');
-		var loc = encodeURIComponent(pickup);
-		var url = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + title + '&dates=' + dates + '&details=' + details + '&location=' + loc;
+		function fmtGcal(d) { return d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; }
+		function fmtIcs(d)  { return d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; }
+		var title   = 'Taxi: ' + pickup + (dropoff ? ' → ' + dropoff : '');
+		var details = 'RideFleet booking' + (bookingId ? ' #' + bookingId : '') + '.';
+		// Google Calendar deep-link
+		var gcalUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+			+ '&text='     + encodeURIComponent(title)
+			+ '&dates='    + encodeURIComponent(fmtGcal(dt) + '/' + fmtGcal(end))
+			+ '&details='  + encodeURIComponent(details)
+			+ '&location=' + encodeURIComponent(pickup);
+		// Apple / iCal — generate .ics blob
+		var icsLines = [
+			'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RideFleet//Chatbot//EN',
+			'BEGIN:VEVENT',
+			'UID:rfac-' + bookingId + '-' + Date.now() + '@ridefleet',
+			'DTSTAMP:'  + fmtIcs(new Date()),
+			'DTSTART:'  + fmtIcs(dt),
+			'DTEND:'    + fmtIcs(end),
+			'SUMMARY:'  + title.replace(/,/g, '\\,'),
+			'DESCRIPTION:' + details.replace(/,/g, '\\,'),
+			'LOCATION:' + pickup.replace(/,/g, '\\,'),
+			'END:VEVENT', 'END:VCALENDAR'
+		].join('\r\n');
+		var blob = new Blob([icsLines], {type: 'text/calendar;charset=utf-8'});
+		var icsUrl = URL.createObjectURL(blob);
+
 		var msgs = rfacMessagesEl();
 		if (!msgs) return;
-		var ex = document.getElementById('rfac-calendar-link');
+		var ex = document.getElementById('rfac-calendar-links');
 		if (ex) ex.remove();
-		var a = document.createElement('a');
-		a.id = 'rfac-calendar-link';
-		a.href = url;
-		a.target = '_blank';
-		a.rel = 'noopener noreferrer';
-		a.className = 'rfac-calendar-link';
-		a.textContent = '📅 Add to Google Calendar';
-		msgs.appendChild(a);
+		var exOld = document.getElementById('rfac-calendar-link');
+		if (exOld) exOld.remove();
+
+		var wrap = document.createElement('div');
+		wrap.id = 'rfac-calendar-links';
+		wrap.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:6px 12px 4px;';
+
+		var gcal = document.createElement('a');
+		gcal.href = gcalUrl; gcal.target = '_blank'; gcal.rel = 'noopener noreferrer';
+		gcal.className = 'rfac-calendar-link';
+		gcal.textContent = '📅 Google Calendar';
+
+		var ical = document.createElement('a');
+		ical.href = icsUrl; ical.download = 'ride-' + (bookingId || 'booking') + '.ics';
+		ical.className = 'rfac-calendar-link rfac-calendar-link--apple';
+		ical.textContent = '🍎 Apple Calendar';
+
+		wrap.appendChild(gcal);
+		wrap.appendChild(ical);
+		msgs.appendChild(wrap);
 		rfacScrollToBottom();
 	}
 

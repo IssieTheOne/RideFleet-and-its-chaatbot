@@ -144,6 +144,22 @@ $top_customers = self::get_top_customers();
 </div>
 </div>
 
+<?php if ('' !== trim((string) \RideFleetBooking\Support\Options::get('airlabs_api_key', ''))): ?>
+<div class="rfb-ops-grid" style="grid-template-columns:1fr;">
+	<div class="rfb-panel">
+		<?php
+		$def_iata = strtoupper(trim((string) \RideFleetBooking\Support\Options::get('airlabs_default_iata', '')));
+		?>
+		<h2><?php printf(esc_html__('Upcoming Arrivals%s', 'ridefleet-booking'), $def_iata ? ' — ' . esc_html($def_iata) : ''); ?>
+			<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-flights' . ($def_iata ? '&iata=' . $def_iata : ''))); ?>" style="font-size:12px;font-weight:400;margin-left:10px;">
+				<?php esc_html_e('View all →', 'ridefleet-booking'); ?>
+			</a>
+		</h2>
+		<?php FlightTrackerPage::dashboard_widget(); ?>
+	</div>
+</div>
+<?php endif; ?>
+
 <script>
 (function() {
 if (typeof Chart === 'undefined') {

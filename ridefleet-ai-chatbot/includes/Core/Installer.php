@@ -217,7 +217,6 @@ final class Installer {
 			'service_area_radius_km' => 100,
 			'fast_model' => '',
 			'quality_model' => '',
-			'airlabs_api_key' => '',
 			'chatbot_ui_theme' => [
 				'primary' => '#0f766e',
 				'primary_dark' => '#0b5f59',

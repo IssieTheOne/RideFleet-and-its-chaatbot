@@ -46,6 +46,8 @@ final class SettingsPage {
 			'enable_extras' => !empty($input['enable_extras']) ? 'yes' : 'no',
 			'admin_email' => sanitize_email($input['admin_email'] ?? get_option('admin_email')),
 			'review_link' => esc_url_raw($input['review_link'] ?? ''),
+			'airlabs_api_key' => sanitize_text_field($input['airlabs_api_key'] ?? ''),
+			'airlabs_default_iata' => strtoupper(substr(sanitize_text_field($input['airlabs_default_iata'] ?? ''), 0, 4)),
 			'email_templates' => [
 				'booking_subject' => sanitize_text_field($input['email_templates']['booking_subject'] ?? 'Your booking request {booking_number}'),
 				'booking_body' => sanitize_textarea_field($input['email_templates']['booking_body'] ?? ''),
@@ -346,6 +348,26 @@ final class SettingsPage {
 							</a>
 							<span class="rfb-settings-test-email-hint"><?php esc_html_e('Sends to the notification email above.', 'ridefleet-booking'); ?></span>
 						</div>
+					</section>
+
+					<section class="rfb-panel rfb-settings-section">
+						<div class="rfb-settings-section-head">
+							<span class="rfb-settings-section-icon dashicons dashicons-airplane"></span>
+							<div>
+								<h2><?php esc_html_e('Flight Tracker', 'ridefleet-booking'); ?></h2>
+								<p><?php esc_html_e('Airlabs API integration for the Flight Tracker page and dashboard widget.', 'ridefleet-booking'); ?></p>
+							</div>
+						</div>
+						<label>
+							<span><?php esc_html_e('Airlabs API Key', 'ridefleet-booking'); ?></span>
+							<input type="password" id="rfb_airlabs_api_key" name="rfb_settings[airlabs_api_key]" value="<?php echo esc_attr($options['airlabs_api_key'] ?? ''); ?>" class="regular-text" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+							<small><?php printf(esc_html__('Used for the Flight Tracker page. Get yours at %s.', 'ridefleet-booking'), '<a href="https://airlabs.co" target="_blank" rel="noopener">airlabs.co</a>'); ?></small>
+						</label>
+						<label>
+							<span><?php esc_html_e('Default Airport IATA', 'ridefleet-booking'); ?></span>
+							<input type="text" id="rfb_airlabs_default_iata" name="rfb_settings[airlabs_default_iata]" value="<?php echo esc_attr($options['airlabs_default_iata'] ?? ''); ?>" class="small-text" placeholder="BRU" maxlength="4" style="text-transform:uppercase;width:100px;">
+							<small><?php esc_html_e('The airport code pre-filled on the Flight Tracker page and shown in the dashboard widget.', 'ridefleet-booking'); ?></small>
+						</label>
 					</section>
 
 				</div>

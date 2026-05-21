@@ -75,6 +75,7 @@ final class Admin {
 		add_submenu_page(null, __('Routes & SEO', 'ridefleet-booking'), __('Routes & SEO', 'ridefleet-booking'), 'manage_options', 'ridefleet-route-pages', [RoutePagesPage::class, 'render']);
 		add_submenu_page(null, __('Service Areas', 'ridefleet-booking'), __('Service Areas', 'ridefleet-booking'), 'manage_options', 'ridefleet-geofences', [GeofenceZonesPage::class, 'render']);
 		add_submenu_page(null, __('Core Booking & Geofencing Rules', 'ridefleet-booking'), __('Core Rules', 'ridefleet-booking'), 'manage_options', 'ridefleet-core-rules', [CoreRulesPage::class, 'render']);
+		add_submenu_page('ridefleet-booking', __('Flight Tracker', 'ridefleet-booking'), __('✈ Flights', 'ridefleet-booking'), 'manage_options', 'ridefleet-flights', [FlightTrackerPage::class, 'render']);
 		add_submenu_page('ridefleet-booking', __('Settings', 'ridefleet-booking'), __('Settings', 'ridefleet-booking'), 'manage_options', 'ridefleet-settings', [SettingsPage::class, 'render']);
 	}
 
@@ -98,7 +99,7 @@ final class Admin {
 		}
 
 		// Visible submenu pages → return their own slug so WordPress highlights them correctly
-		if (in_array($page, ['ridefleet-booking', 'ridefleet-bookings', 'ridefleet-calendar', 'ridefleet-customers', 'ridefleet-operational', 'ridefleet-settings'], true)) {
+		if (in_array($page, ['ridefleet-booking', 'ridefleet-bookings', 'ridefleet-calendar', 'ridefleet-customers', 'ridefleet-operational', 'ridefleet-flights', 'ridefleet-settings'], true)) {
 			return $page;
 		}
 
@@ -135,6 +136,7 @@ final class Admin {
 			'ridefleet-geofences'     => 'admin-geo',
 			'ridefleet-core-rules'    => 'admin-pricing',
 			'ridefleet-settings'      => 'admin-settings',
+			'ridefleet-flights'       => 'admin-flights',
 		];
 
 		if (isset($page_css[$page])) {

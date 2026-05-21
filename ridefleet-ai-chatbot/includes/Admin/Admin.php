@@ -103,14 +103,6 @@ final class Admin {
 			[PrivacyPage::class, 'render']
 		);
 
-		add_submenu_page(
-			'ridefleet-ai-chatbot',
-			__('Flight Tracker', 'ridefleet-ai-chatbot'),
-			__('✈ Flights', 'ridefleet-ai-chatbot'),
-			'manage_options',
-			'ridefleet-ai-chatbot-flights',
-			[FlightTrackerPage::class, 'render']
-		);
 	}
 
 	private static function pending_change_count(): int {
@@ -239,7 +231,6 @@ final class Admin {
 				'service_area_radius_km'=> max(1, absint($_POST['service_area_radius_km'] ?? 100)),
 				'fast_model'    => sanitize_text_field(wp_unslash($_POST['fast_model'] ?? '')),
 				'quality_model' => sanitize_text_field(wp_unslash($_POST['quality_model'] ?? '')),
-				'airlabs_api_key' => sanitize_text_field(wp_unslash($_POST['airlabs_api_key'] ?? '')),
 			]
 		);
 
@@ -573,17 +564,7 @@ final class Admin {
 					</div>
 				</section>
 
-				<section class="rfac-panel">
-					<p class="rfac-kicker">Flight Tracker</p>
-					<h2>Airlabs API Key</h2>
-					<label>
-						<span>Airlabs API Key</span>
-						<input type="password" name="airlabs_api_key" value="<?php echo esc_attr((string)($options['airlabs_api_key']??'')); ?>" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
-						<small>Used on the Flight Tracker page. Get yours at <a href="https://airlabs.co" target="_blank" rel="noopener">airlabs.co</a>.</small>
-					</label>
-				</section>
-
-				<section class="rfac-panel rfac-panel-wide">
+<section class="rfac-panel rfac-panel-wide">
 					<p class="rfac-kicker"><?php esc_html_e('Distribution', 'ridefleet-ai-chatbot'); ?></p>
 					<h2><?php esc_html_e('Over-the-air updates', 'ridefleet-ai-chatbot'); ?></h2>
 					<p style="color:#64748b;margin-top:0;">
