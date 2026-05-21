@@ -189,6 +189,13 @@ final class Admin {
 			}
 		}
 
+		// Popular destinations — textarea, one per line
+		$raw_dests = sanitize_textarea_field((string) ($_POST['popular_destinations_raw'] ?? ''));
+		$sanitized_popular_destinations = array_values(array_filter(array_map('sanitize_text_field', explode("\n", $raw_dests))));
+
+		// Dispatch response time
+		$sanitized_dispatch_minutes = max(1, min(120, absint($_POST['dispatch_response_minutes'] ?? 15)));
+
 		Options::update(
 			[
 				'openrouter_key' => $key,
@@ -209,6 +216,8 @@ final class Admin {
 					'muted' => sanitize_hex_color(wp_unslash($_POST['theme_muted'] ?? '#64748b')) ?: '#64748b',
 				],
 				'faq_items' => $faq_items,
+				'popular_destinations' => $sanitized_popular_destinations,
+				'dispatch_response_minutes' => $sanitized_dispatch_minutes,
 			]
 		);
 
@@ -568,6 +577,23 @@ final class Admin {
 					<code>[ridefleet_ai_chatbot]</code>
 				</section>
 
+				<!-- Popular destinations -->
+				<div class="rfac-card">
+					<h2 class="rfac-card__title"><?php esc_html_e( 'Popular Destinations', 'ridefleet-ai-chatbot' ); ?></h2>
+					<p class="rfac-card__subtitle"><?php esc_html_e( 'Suggested drop-off quick-reply chips shown when the customer has confirmed a pickup. One destination per line.', 'ridefleet-ai-chatbot' ); ?></p>
+					<textarea name="popular_destinations_raw" rows="6" class="large-text"><?php
+						$dests = (array) \RideFleetAIChatbot\Support\Options::get( 'popular_destinations', [] );
+						echo esc_textarea( implode( "\n", array_filter( $dests ) ) );
+					?></textarea>
+					<p class="description"><?php esc_html_e( 'Example: JFK Airport, New York', 'ridefleet-ai-chatbot' ); ?></p>
+				</div>
+				<!-- Dispatch response time -->
+				<div class="rfac-card">
+					<h2 class="rfac-card__title"><?php esc_html_e( 'Dispatch Response Time', 'ridefleet-ai-chatbot' ); ?></h2>
+					<p class="rfac-card__subtitle"><?php esc_html_e( 'Estimated minutes until dispatch confirms a booking. Shown in the booking confirmation message.', 'ridefleet-ai-chatbot' ); ?></p>
+					<input type="number" name="dispatch_response_minutes" min="1" max="120" value="<?php echo esc_attr( (string) \RideFleetAIChatbot\Support\Options::get( 'dispatch_response_minutes', 15 ) ); ?>" style="width:80px" />
+					<span class="description"><?php esc_html_e( 'minutes', 'ridefleet-ai-chatbot' ); ?></span>
+				</div>
 				<!-- FAQ section -->
 				<div class="rfac-card rfac-card--faq">
 					<h2 class="rfac-card__title"><?php esc_html_e( 'Custom FAQ Answers', 'ridefleet-ai-chatbot' ); ?></h2>

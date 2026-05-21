@@ -44,6 +44,8 @@ final class Options {
 			'license_key',
 			'chatbot_ui_theme',
 			'faq_items',
+			'dispatch_response_minutes',
+			'popular_destinations',
 		];
 
 		$next = $current;

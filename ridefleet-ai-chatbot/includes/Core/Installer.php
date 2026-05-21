@@ -210,6 +210,8 @@ final class Installer {
 			'update_endpoint' => '',
 			'license_key' => '',
 			'faq_items' => [],
+			'dispatch_response_minutes' => 15,
+			'popular_destinations' => [],
 			'chatbot_ui_theme' => [
 				'primary' => '#0f766e',
 				'primary_dark' => '#0b5f59',

@@ -641,3 +641,30 @@
 		width: 52px;
 	}
 }
+
+/* ── Pricing badges ──────────────────────────────────────────────────────── */
+.rfac-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  vertical-align: middle;
+  margin-left: 4px;
+  letter-spacing: 0.3px;
+}
+
+.rfac-badge--flat {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.rfac-badge--metered {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.rfac-route-line--muted strong {
+  opacity: 0.75;
+  font-weight: 500;
+}

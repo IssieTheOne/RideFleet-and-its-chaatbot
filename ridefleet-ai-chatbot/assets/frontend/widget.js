@@ -99,7 +99,28 @@
 			html += '<div class="rfac-route-line"><span>Coupon</span><strong>' + escapeHtml(collected.coupon_code) + ' <em style="opacity:.7;font-weight:500;">(applied at dispatch)</em></strong></div>';
 		}
 		if (quote.final_price) {
-			html += '<div class="rfac-price-line"><span>Verified fare</span><strong>' + escapeHtml(quote.currency || 'USD') + ' ' + Number(quote.final_price).toFixed(2) + '</strong></div>';
+			var pricingBadge = '';
+			if (quote.pricing_type === 'flat_rate') {
+				pricingBadge = ' <span class="rfac-badge rfac-badge--flat">🔒 Fixed</span>';
+			} else if (quote.pricing_type === 'metered') {
+				pricingBadge = ' <span class="rfac-badge rfac-badge--metered">~ Estimate</span>';
+			}
+			html += '<div class="rfac-price-line"><span>Verified fare' + pricingBadge + '</span><strong>' + escapeHtml(quote.currency || 'USD') + ' ' + Number(quote.final_price).toFixed(2) + '</strong></div>';
+			if (quote.distance_km && quote.duration_minutes) {
+				var dur = quote.duration_minutes;
+				var h = Math.floor(dur / 60);
+				var m = dur % 60;
+				var durStr = h > 0 ? (h + 'h ' + String(m).padStart(2, '0') + 'min') : (m + 'min');
+				html += '<div class="rfac-route-line rfac-route-line--muted"><span>Travel estimate</span><strong>' + durStr + ' · ' + Number(quote.distance_km).toFixed(0) + ' km</strong></div>';
+			}
+			// Addons breakdown
+			var addons = quote.addons || {};
+			if (addons.vehicle_adjustment > 0) {
+				html += '<div class="rfac-route-line rfac-route-line--muted"><span>Vehicle surcharge</span><strong>+' + escapeHtml(quote.currency || 'USD') + ' ' + Number(addons.vehicle_adjustment).toFixed(2) + '</strong></div>';
+			}
+			if (addons.extras_total > 0) {
+				html += '<div class="rfac-route-line rfac-route-line--muted"><span>Extras</span><strong>+' + escapeHtml(quote.currency || 'USD') + ' ' + Number(addons.extras_total).toFixed(2) + '</strong></div>';
+			}
 		}
 		if (quote.requires_approval || (quote.service_area && (quote.service_area.pickup_allowed === false || quote.service_area.dropoff_allowed === false))) {
 			var sa = quote.service_area || {};
@@ -330,7 +351,15 @@
 				while (messages.firstChild) {
 					messages.removeChild(messages.firstChild);
 				}
-				var greeting = messages.getAttribute('data-rfac-default-greeting') || 'Hi! How can I help?';
+				var defaultGreeting = messages.getAttribute('data-rfac-default-greeting') || 'Hi! How can I help?';
+				// Override greeting based on browser language
+				var browserLang = (navigator.language || navigator.userLanguage || 'en').substring(0, 2).toLowerCase();
+				if (browserLang === 'fr' && defaultGreeting) {
+					defaultGreeting = 'Bonjour ! Je peux réserver votre taxi. Où dois-je vous prendre en charge ?';
+				} else if (browserLang === 'nl' && defaultGreeting) {
+					defaultGreeting = 'Hallo! Ik kan uw taxi boeken. Waar moeten we u ophalen?';
+				}
+				var greeting = defaultGreeting;
 				var item = document.createElement('div');
 				item.className = 'rfac-message rfac-message-bot';
 				item.textContent = greeting;
@@ -391,8 +420,36 @@
 
 		function appendQuickReplies(container, state, payload) {
 			var replies = [];
+			var chips = null;
 
-			if (state === 'confirm_price') {
+			// Location disambiguation chips from server
+			var candidates = payload && payload.data && payload.data.location_candidates;
+			if (candidates && candidates.length && (state === 'confirm_pickup_city' || state === 'confirm_dropoff_city')) {
+				chips = candidates.map(function(c) {
+					return { label: c.length > 30 ? c.substring(0, 28) + '…' : c, value: c };
+				}).filter(function(r) { return r.value !== ''; });
+			}
+
+			if (chips !== null) {
+				replies = chips;
+			} else if (state === 'confirm_long_trip') {
+				replies = [
+					{ label: 'Yes, book the taxi', value: 'yes', primary: true },
+					{ label: 'Change destination', value: 'change route' }
+				];
+			} else if (state === 'vehicle_unavailable') {
+				replies = [
+					{ label: 'Request multiple taxis', value: 'request multiple taxis' },
+					{ label: 'Change passenger count', value: 'change route' }
+				];
+			} else if (state === 'capture_dropoff') {
+				var popularDests = payload && payload.data && payload.data.popular_destinations;
+				if (popularDests && popularDests.length) {
+					replies = popularDests.slice(0, 5).map(function(d) {
+						return { label: d.length > 25 ? d.substring(0, 23) + '…' : d, value: d };
+					});
+				}
+			} else if (state === 'confirm_price') {
 				replies = [
 					{ label: 'Confirm booking', value: 'yes, confirm', primary: true },
 					{ label: 'Change details', value: 'I want to change something' }
@@ -564,6 +621,13 @@
 							summaryEl.hidden = false;
 						}
 					}
+					// Save contact details for returning customer shortcut
+					if (payload.state === 'complete' && payload.data && payload.data.collected) {
+						var savedData = { name: payload.data.collected.customer_name || '', phone: payload.data.collected.customer_phone || '' };
+						if (savedData.name && savedData.phone) {
+							try { localStorage.setItem('rfac_saved_contact', JSON.stringify(savedData)); } catch(e) {}
+						}
+					}
 					appendInfoCard(messages, payload);
 					appendActionCard(messages, payload, closeWidget, sendText);
 					setState(payload.state);
@@ -600,6 +664,40 @@
 		});
 
 		setState(currentState);
+
+		// Returning customer shortcut
+		try {
+			var savedContact = JSON.parse(localStorage.getItem('rfac_saved_contact') || 'null');
+			if (savedContact && savedContact.name && savedContact.phone) {
+				var returnMsg = 'Welcome back, ' + savedContact.name + '! Use the same contact details (' + savedContact.phone + ') for this booking?';
+				setTimeout(function() {
+					appendMessage(messages, returnMsg, 'bot');
+					var chipRow = document.createElement('div');
+					chipRow.className = 'rfac-chips';
+					var yesChip = document.createElement('button');
+					yesChip.type = 'button';
+					yesChip.className = 'rfac-chip rfac-chip--primary';
+					yesChip.textContent = 'Yes, use saved';
+					yesChip.addEventListener('click', function() {
+						chipRow.remove();
+						sendText('My name is ' + savedContact.name + ' and my phone is ' + savedContact.phone);
+						try { localStorage.removeItem('rfac_prefill_name'); localStorage.removeItem('rfac_prefill_phone'); } catch(e) {}
+					});
+					var noChip = document.createElement('button');
+					noChip.type = 'button';
+					noChip.className = 'rfac-chip';
+					noChip.textContent = 'Use different details';
+					noChip.addEventListener('click', function() {
+						chipRow.remove();
+						try { localStorage.removeItem('rfac_saved_contact'); localStorage.removeItem('rfac_prefill_name'); localStorage.removeItem('rfac_prefill_phone'); } catch(e) {}
+					});
+					chipRow.appendChild(yesChip);
+					chipRow.appendChild(noChip);
+					messages.appendChild(chipRow);
+					messages.scrollTop = messages.scrollHeight;
+				}, 600);
+			}
+		} catch(e) {}
 	}
 
 	document.addEventListener('DOMContentLoaded', function () {

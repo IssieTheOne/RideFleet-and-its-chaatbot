@@ -326,6 +326,13 @@ final class ConversationEngine {
 				$session['state'] = 'quote_requested';
 			}
 			}
+		} elseif ('confirm_long_trip' === $session['state'] && $this->is_affirmative($message)) {
+			$session['state'] = 'confirm_price';
+		} elseif ('confirm_long_trip' === $session['state'] && $this->is_negative($message)) {
+			$session['state'] = 'capture_pickup';
+			$session['collected_data'] = ['language' => $data['language'] ?? 'en'];
+			$session['last_quote'] = [];
+			$session['validation_error'] = __('No problem. Where would you like to be picked up?', 'ridefleet-ai-chatbot');
 		} elseif ('confirm_price' === $session['state'] && $this->is_affirmative($message)) {
 			$session['state'] = 'capture_passengers';
 		} elseif ('confirm_price' === $session['state'] && $this->is_negative($message)) {
@@ -431,17 +438,37 @@ final class ConversationEngine {
 			case 'capture_pickup':
 				return $this->reply($session, $this->say($session, 'ask_pickup'));
 
-			case 'capture_dropoff':
+			case 'capture_dropoff': {
+				$popular = (array) \RideFleetAIChatbot\Support\Options::get('popular_destinations', []);
+				$session['ui_popular_destinations'] = array_values(array_filter(array_map('sanitize_text_field', $popular)));
 				return $this->reply($session, $this->say($session, 'ask_dropoff'));
+			}
 
-			case 'confirm_pickup_city':
-				return $this->reply($session, $this->city_confirmation_prompt($session, 'pickup', (string) ($data['pending_pickup_city'] ?? __('that city', 'ridefleet-ai-chatbot'))));
+			case 'confirm_pickup_city': {
+				$city = (string) ($data['pending_pickup_city'] ?? '');
+				$candidates = $this->fetch_location_candidates($city);
+				if ($candidates) {
+					$session['collected_data']['pickup_candidates'] = $candidates;
+				}
 
-			case 'confirm_dropoff_city':
-				return $this->reply($session, $this->city_confirmation_prompt($session, 'dropoff', (string) ($data['pending_dropoff_city'] ?? __('that city', 'ridefleet-ai-chatbot'))));
+				return $this->reply($session, $this->city_confirmation_prompt($session, 'pickup', $city ?: __('that city', 'ridefleet-ai-chatbot')));
+			}
+
+			case 'confirm_dropoff_city': {
+				$city = (string) ($data['pending_dropoff_city'] ?? '');
+				$candidates = $this->fetch_location_candidates($city);
+				if ($candidates) {
+					$session['collected_data']['dropoff_candidates'] = $candidates;
+				}
+
+				return $this->reply($session, $this->city_confirmation_prompt($session, 'dropoff', $city ?: __('that city', 'ridefleet-ai-chatbot')));
+			}
 
 			case 'quote_requested':
 				return $this->quote_trip($session);
+
+			case 'confirm_long_trip':
+				return $this->reply($session, $this->long_trip_confirmation_message($session));
 
 			case 'confirm_price':
 				return $this->reply($session, $this->say($session, 'ask_confirm'));
@@ -516,12 +543,20 @@ final class ConversationEngine {
 		$pickup_allowed = !isset($service_status['pickup_allowed']) || !empty($service_status['pickup_allowed']);
 		$dropoff_allowed = !isset($service_status['dropoff_allowed']) || !empty($service_status['dropoff_allowed']);
 
+		$pricing_source = sanitize_key((string) ($quote['pricing_source'] ?? 'standard'));
+		$is_flat_rate = str_contains($pricing_source, 'flat_rate');
+		$distance_km = round((float) ($quote['distance_km'] ?? 0), 1);
+		$duration_min = max(0, (int) ($quote['duration_minutes'] ?? 0));
+
 		$session['last_quote'] = [
 			'final_price' => round($price, 2),
 			'base_price' => round((float) ($quote['base_price'] ?? $price), 2),
 			'currency' => $currency,
 			'zone_name' => $zone,
 			'addons' => $quote['addons'] ?? [],
+			'pricing_type' => $is_flat_rate ? 'flat_rate' : 'metered',
+			'distance_km' => $distance_km,
+			'duration_minutes' => $duration_min,
 			'requires_approval' => $requires_approval,
 			'service_area' => [
 				'status' => sanitize_key((string) ($service_status['status'] ?? ($requires_approval ? 'approval_required' : 'inside'))),
@@ -531,7 +566,8 @@ final class ConversationEngine {
 			],
 			'raw' => $quote,
 		];
-		$session['state'] = $continue_booking ? 'capture_name' : 'confirm_price';
+		$long_trip = !$continue_booking && $duration_min > 180;
+		$session['state'] = $continue_booking ? 'capture_name' : ($long_trip ? 'confirm_long_trip' : 'confirm_price');
 
 		$zone_text = $zone ? sprintf(__(' (%s)', 'ridefleet-ai-chatbot'), $zone) : '';
 		if ($continue_booking) {
@@ -640,6 +676,8 @@ final class ConversationEngine {
 	private function commit_response(array $response): array {
 		$lang = (string) ($response['session']['collected_data']['language'] ?? 'en');
 		$response['message'] = $this->ai->localize_reply((string) $response['message'], $lang, $response['session']);
+		// ui_popular_destinations is per-response only, don't persist in DB
+		unset($response['session']['ui_popular_destinations']);
 		$this->sessions->update($response['session']);
 		$this->sessions->add_message((int) $response['session']['id'], 'assistant', $response['message'], $this->admin_summary($response['message'], $lang, 'assistant', $this->current_turn), $this->message_meta($this->current_turn, $lang));
 		return $this->format_response($response);
@@ -857,7 +895,7 @@ final class ConversationEngine {
 		$allowed = match ($state) {
 			'capture_pickup', 'confirm_pickup_city', 'greeting' => ['pickup', 'dropoff', 'language_target', 'booking_id', 'question_type'],
 			'capture_dropoff', 'confirm_dropoff_city' => ['dropoff', 'language_target', 'booking_id', 'question_type'],
-			'confirm_price' => ['proposed_price', 'language_target', 'booking_id', 'question_type'],
+			'confirm_price', 'confirm_long_trip' => ['proposed_price', 'language_target', 'booking_id', 'question_type'],
 			'capture_passengers' => ['passenger_count', 'language_target', 'question_type'],
 			'capture_luggage' => ['luggage_count', 'language_target', 'question_type'],
 			'capture_vehicle' => ['vehicle_choice', 'language_target', 'question_type'],
@@ -996,6 +1034,20 @@ final class ConversationEngine {
 		}
 
 		if ('vehicle_unavailable' === $session['state']) {
+			if (preg_match('/\b(multiple|multi|2|two|several|meer|plusieurs|meerdere|mehrere)\b.*\b(taxi|cab|vehicle|car|ride|rit|voiture)\b|\b(request|book|send|aanvragen|demande)\b.*\b(multiple|multi|meerdere|plusieurs)\b/i', $message)) {
+				$data = $session['collected_data'];
+				$request_text = sprintf(
+					'Multi-vehicle request: %d passengers, %d luggage. Pickup: %s → Dropoff: %s.',
+					(int) ($data['passengers'] ?? 1),
+					(int) ($data['luggage'] ?? 0),
+					(string) ($data['pickup_address'] ?? ''),
+					(string) ($data['dropoff_address'] ?? '')
+				);
+				$this->sessions->log_change_request((int) $session['id'], $session, $request_text);
+				$session['state'] = 'change_pending';
+				return $this->reply($session, __('Done. I sent a multi-vehicle request to dispatch. They will review your group size and arrange the right vehicles. You will hear back once confirmed.', 'ridefleet-ai-chatbot'));
+			}
+
 			if (preg_match('/\b(contact|reach|call|email|phone|who|person|dispatch|human|someone|speak|number|address|details)\b/i', $message)) {
 				$phone = trim((string) \RideFleetAIChatbot\Support\Options::get('dispatch_contact_number', ''));
 				$email = trim((string) \RideFleetAIChatbot\Support\Options::get('notification_email', get_option('admin_email', '')));
@@ -1283,25 +1335,69 @@ final class ConversationEngine {
 
 	private function vehicle_unavailable_message(array $session): string {
 		$data = $session['collected_data'];
+		$passengers = max(1, (int) ($data['passengers'] ?? 1));
+		$luggage = max(0, (int) ($data['luggage'] ?? 0));
 		$phone = trim((string) \RideFleetAIChatbot\Support\Options::get('dispatch_contact_number', ''));
-		$contact = $phone ? sprintf(__(' Please contact dispatch at %s so a human can arrange a suitable vehicle.', 'ridefleet-ai-chatbot'), $phone) : __(' Please contact dispatch/admin so a human can arrange a suitable vehicle.', 'ridefleet-ai-chatbot');
-		return sprintf(
-			__('I can quote the ride, but I cannot finalize it online because no configured vehicle can carry %1$d passenger(s) and %2$d luggage item(s).%3$s', 'ridefleet-ai-chatbot'),
-			max(1, (int) ($data['passengers'] ?? 1)),
-			max(0, (int) ($data['luggage'] ?? 0)),
-			$contact
+		$contact = $phone
+			? sprintf(__(' Call dispatch at %s to arrange a suitable vehicle.', 'ridefleet-ai-chatbot'), $phone)
+			: __(' Contact dispatch/admin to arrange a suitable vehicle.', 'ridefleet-ai-chatbot');
+
+		$base = sprintf(
+			__('No configured vehicle can carry %1$d passenger(s) and %2$d luggage item(s).', 'ridefleet-ai-chatbot'),
+			$passengers, $luggage
 		);
+
+		// Offer multi-vehicle dispatch for large groups
+		if ($passengers >= 5) {
+			$lang = (string) ($data['language'] ?? 'en');
+			if ('fr' === $lang) {
+				return $base . ' ' . __('Pour un grand groupe, je peux envoyer une demande multi-vehicule a dispatch. Repondez "demande multi-vehicule" pour que dispatch organise plusieurs taxis, ou contactez-les directement.', 'ridefleet-ai-chatbot') . $contact;
+			}
+			if ('nl' === $lang) {
+				return $base . ' ' . __('Voor een grote groep kan ik een meervoudig-voertuigaanvraag naar dispatch sturen. Antwoord "meerdere taxis aanvragen" zodat dispatch meerdere voertuigen regelt, of neem rechtstreeks contact op.', 'ridefleet-ai-chatbot') . $contact;
+			}
+			return $base . ' ' . __('For a large group, I can send a multi-vehicle request to dispatch — reply "request multiple taxis" and they will arrange it. Or contact dispatch directly.', 'ridefleet-ai-chatbot') . $contact;
+		}
+
+		return $base . $contact;
 	}
 
 	private function quote_message(array $session, string $pickup, string $dropoff, string $currency, float $price, string $zone_text): string {
 		$lang = (string) ($session['collected_data']['language'] ?? 'en');
+		$quote = $session['last_quote'];
+		$is_flat = (string) ($quote['pricing_type'] ?? 'metered') === 'flat_rate';
+		$duration = (int) ($quote['duration_minutes'] ?? 0);
+		$distance = (float) ($quote['distance_km'] ?? 0);
+
+		$price_label = $is_flat ? '🔒 ' : '~ ';
+		$price_type = $is_flat
+			? __('fixed-price route', 'ridefleet-ai-chatbot')
+			: __('estimated fare', 'ridefleet-ai-chatbot');
+
+		$travel = '';
+		if ($duration > 0 && $distance > 0) {
+			$h = intdiv($duration, 60);
+			$m = $duration % 60;
+			$dur_text = $h > 0 ? sprintf('%dh %02dmin', $h, $m) : sprintf('%dmin', $m);
+			$travel = sprintf(' · %s · %.0f km', $dur_text, $distance);
+		}
+
 		if ('fr' === $lang) {
-			return sprintf(__('C est note : %1$s vers %2$s. Le prix indicatif verifie est %3$s %4$.2f%5$s. Ce n est pas final tant que les options et le dispatch ne confirment pas. Voulez-vous continuer ?', 'ridefleet-ai-chatbot'), $pickup, $dropoff, $currency, $price, $zone_text);
+			return sprintf(
+				__('Trajet note : %1$s → %2$s%3$s. %4$sPrix (%5$s) : %6$s %7$.2f%8$s. Ce tarif n\'est pas definitif tant que les options et le dispatch ne confirment pas. Voulez-vous continuer ?', 'ridefleet-ai-chatbot'),
+				$pickup, $dropoff, $travel, $price_label, $price_type, $currency, $price, $zone_text
+			);
 		}
 		if ('nl' === $lang) {
-			return sprintf(__('Genoteerd: %1$s naar %2$s. De gecontroleerde richtprijs is %3$s %4$.2f%5$s. Dit is pas definitief na opties en dispatchbevestiging. Wilt u doorgaan?', 'ridefleet-ai-chatbot'), $pickup, $dropoff, $currency, $price, $zone_text);
+			return sprintf(
+				__('Rit genoteerd : %1$s → %2$s%3$s. %4$sPrijs (%5$s) : %6$s %7$.2f%8$s. Pas definitief na opties en dispatchbevestiging. Wilt u doorgaan ?', 'ridefleet-ai-chatbot'),
+				$pickup, $dropoff, $travel, $price_label, $price_type, $currency, $price, $zone_text
+			);
 		}
-		return sprintf(__('Got it: %1$s to %2$s. Your verified quote is %3$s %4$.2f%5$s. This is not final until ride options and dispatch confirmation are complete. Would you like to continue?', 'ridefleet-ai-chatbot'), $pickup, $dropoff, $currency, $price, $zone_text);
+		return sprintf(
+			__('Got it: %1$s → %2$s%3$s. %4$sYour %5$s is %6$s %7$.2f%8$s. Not final until ride options and dispatch confirm. Would you like to continue?', 'ridefleet-ai-chatbot'),
+			$pickup, $dropoff, $travel, $price_label, $price_type, $currency, $price, $zone_text
+		);
 	}
 
 	private function quote_updated_message(array $session, string $currency, float $price, string $zone_text): string {
@@ -1316,15 +1412,34 @@ final class ConversationEngine {
 		return $prefix . sprintf(__('Updated total with your ride options: %1$s %2$.2f%3$s. Great. What name should we put on the booking?', 'ridefleet-ai-chatbot'), $currency, $price, $zone_text);
 	}
 
-	private function booking_confirmed_message(array $session, string $booking_id): string {
+	private function long_trip_confirmation_message(array $session): string {
 		$lang = (string) ($session['collected_data']['language'] ?? 'en');
+		$quote = $session['last_quote'];
+		$duration = (int) ($quote['duration_minutes'] ?? 0);
+		$h = intdiv($duration, 60);
+		$m = $duration % 60;
+		$dur_text = $h > 0 ? sprintf('%dh %02dmin', $h, $m) : sprintf('%dmin', $m);
+		$currency = (string) ($quote['currency'] ?? 'USD');
+		$price = (float) ($quote['final_price'] ?? 0);
 		if ('fr' === $lang) {
-			return sprintf(__('Votre demande de course est recue. Numero de reservation : %s. Le prix reste un devis jusqu a la confirmation du dispatch. Besoin d une modification plus tard ? Demandez une modification et le dispatch la verifiera.', 'ridefleet-ai-chatbot'), $booking_id);
+			return sprintf(__('Ce trajet dure environ %s. Le tarif est %s %.2f. Confirmez-vous que vous souhaitez un taxi pour ce long trajet ?', 'ridefleet-ai-chatbot'), $dur_text, $currency, $price);
 		}
 		if ('nl' === $lang) {
-			return sprintf(__('Uw ritaanvraag is ontvangen. Boekingsnummer: %s. De prijs blijft een offerte tot dispatch bevestigt. Later iets wijzigen? Vraag een wijziging aan en dispatch controleert die.', 'ridefleet-ai-chatbot'), $booking_id);
+			return sprintf(__('Deze rit duurt ongeveer %s. De prijs is %s %.2f. Weet u zeker dat u een taxi wilt voor dit lange traject ?', 'ridefleet-ai-chatbot'), $dur_text, $currency, $price);
 		}
-		return sprintf(__('Your ride request is received. Booking ID: %s. The fare is still a quote until dispatch confirms it. Need a change later? Ask for an edit and dispatch will review it.', 'ridefleet-ai-chatbot'), $booking_id);
+		return sprintf(__('Heads up: this is a long trip (~%s). The verified fare is %s %.2f. Just confirming you want a taxi for this journey — reply yes to continue, or change route to check a different trip.', 'ridefleet-ai-chatbot'), $dur_text, $currency, $price);
+	}
+
+	private function booking_confirmed_message(array $session, string $booking_id): string {
+		$lang = (string) ($session['collected_data']['language'] ?? 'en');
+		$eta = max(1, (int) \RideFleetAIChatbot\Support\Options::get('dispatch_response_minutes', 15));
+		if ('fr' === $lang) {
+			return sprintf(__('Votre demande de course est reçue. Numéro de réservation : %1$s. Le prix reste un devis jusqu\'à confirmation du dispatch. Dispatch vous contactera dans environ %2$d minute(s). Besoin d\'une modification ? Demandez un changement et dispatch le vérifiera.', 'ridefleet-ai-chatbot'), $booking_id, $eta);
+		}
+		if ('nl' === $lang) {
+			return sprintf(__('Uw ritaanvraag is ontvangen. Boekingsnummer : %1$s. De prijs blijft een offerte tot dispatch bevestigt. Dispatch neemt contact op binnen ongeveer %2$d minuut(en). Later iets wijzigen? Vraag een wijziging aan en dispatch controleert die.', 'ridefleet-ai-chatbot'), $booking_id, $eta);
+		}
+		return sprintf(__('Your ride request is received. Booking ID: %1$s. The fare is still a quote until dispatch confirms it. Dispatch will be in touch within ~%2$d minute(s). Need a change later? Ask for an edit and dispatch will review it.', 'ridefleet-ai-chatbot'), $booking_id, $eta);
 	}
 
 	private function is_city_level_confirmation(string $message): bool {
@@ -1659,6 +1774,11 @@ final class ConversationEngine {
 	}
 
 	private function normalize_pickup_time(string $message): string {
+		// "ASAP", "now", "immediately", "right now", "as soon as possible"
+		if (preg_match('/^\s*(asap|now|immediately|right\s*now|as\s+soon\s+as\s+possible|straight\s*away|tout\s+de\s+suite|maintenant|nu\s*meteen|zo\s+snel\s+mogelijk)\s*[\.\?!]*\s*$/i', trim($message))) {
+			return wp_date('Y-m-d H:i:s', current_time('timestamp') + 15 * MINUTE_IN_SECONDS);
+		}
+
 		$value = trim(str_replace('"', ':', $message));
 		if (preg_match('/\b24:[0-5]\d\b/', $value)) {
 			return '';
@@ -1773,6 +1893,28 @@ final class ConversationEngine {
 		$place = preg_replace('/\s+(please|thanks|thank you)$/i', '', (string) $place);
 
 		return trim((string) $place, " \t\n\r\0\x0B.,");
+	}
+
+	/**
+	 * Returns top 3 distinct place descriptions for a broad location name.
+	 * Used to populate disambiguation chips in the widget.
+	 */
+	private function fetch_location_candidates(string $city): array {
+		if ('' === $city) {
+			return [];
+		}
+
+		$result = $this->core->search_core_places($city);
+		$predictions = is_array($result['predictions'] ?? null) ? $result['predictions'] : [];
+		$candidates = [];
+		foreach (array_slice($predictions, 0, 4) as $p) {
+			$desc = sanitize_text_field((string) ($p['description'] ?? ''));
+			if ('' !== $desc && $this->looks_like_real_place($desc)) {
+				$candidates[] = $desc;
+			}
+		}
+
+		return array_values(array_unique($candidates));
 	}
 
 	private function resolve_place_text(string $text): string {
@@ -2151,12 +2293,20 @@ final class ConversationEngine {
 				'requires_approval' => !empty($session['last_quote']['requires_approval']),
 				'service_area' => $session['last_quote']['service_area'] ?? null,
 				'coupon' => $session['last_quote']['coupon'] ?? null,
+				'pricing_type' => $session['last_quote']['pricing_type'] ?? null,
+				'distance_km' => $session['last_quote']['distance_km'] ?? null,
+				'duration_minutes' => $session['last_quote']['duration_minutes'] ?? null,
 			],
 			'booking' => [
 				'id' => $session['collected_data']['last_booking_id'] ?? null,
 				'changeRequestId' => $session['collected_data']['last_change_request_id'] ?? null,
 			],
 			'ui_action' => $session['ui_action'] ?? null,
+			'location_candidates' => array_values(array_unique(array_merge(
+				(array) ($session['collected_data']['pickup_candidates'] ?? []),
+				(array) ($session['collected_data']['dropoff_candidates'] ?? [])
+			))),
+			'popular_destinations' => (array) ($session['ui_popular_destinations'] ?? []),
 		];
 	}
 }
