@@ -93,6 +93,28 @@ final class ConversationEngine {
 			}
 		}
 
+		if ('complete' === $session['state'] && $this->asks_return_trip($message)) {
+			$lang = (string) ($session['collected_data']['language'] ?? 'en');
+			$orig_pickup = (string) ($session['collected_data']['pickup_address'] ?? '');
+			$orig_dropoff = (string) ($session['collected_data']['dropoff_address'] ?? '');
+			$session['state'] = 'confirm_price';
+			$session['collected_data'] = [
+				'language' => $lang,
+				'pickup_address' => $orig_dropoff,
+				'dropoff_address' => $orig_pickup,
+			];
+			$session['last_quote'] = [];
+			$session['state'] = 'quote_requested';
+			$return_note = 'fr' === $lang
+				? __('Parfait. Je calcule le prix du trajet retour.', 'ridefleet-ai-chatbot')
+				: ('nl' === $lang
+					? __('Prima. Ik bereken de prijs voor de terugrit.', 'ridefleet-ai-chatbot')
+					: __('Great. Let me get a quote for the return trip.', 'ridefleet-ai-chatbot'));
+			$result = $this->quote_trip($session);
+			$result['message'] = $return_note . ' ' . $result['message'];
+			return $this->commit_response($result);
+		}
+
 		if ('complete' === $session['state'] && $this->asks_for_new_booking($message)) {
 			$lang = (string) ($session['collected_data']['language'] ?? 'en');
 			$session['state'] = 'capture_pickup';
@@ -192,6 +214,8 @@ final class ConversationEngine {
 			return $this->commit_response($response);
 		}
 
+		// One-shot field extraction: try to fill multiple slots from a single rich message
+		$session = $this->apply_one_shot_fields($session, $message);
 		$session = $this->capture_for_state($session, $message, $turn);
 		if (!empty($session['validation_error']) && 'unknown' === (string) ($turn['intent'] ?? 'unknown')) {
 			$session = $this->increment_uncertainty($session);
@@ -621,6 +645,88 @@ final class ConversationEngine {
 		return $this->format_response($response);
 	}
 
+	/**
+	 * Runs the AI field extractor on the current message and pre-fills every
+	 * collected_data slot it finds, then advances the session state past any
+	 * states whose data is now complete.
+	 */
+	private function apply_one_shot_fields(array $session, string $message): array {
+		$active_states = ['greeting', 'capture_pickup', 'capture_dropoff', 'capture_passengers', 'capture_luggage', 'capture_name', 'capture_phone', 'capture_pickup_time'];
+		if (!in_array((string) ($session['state'] ?? ''), $active_states, true)) {
+			return $session;
+		}
+
+		$extracted = $this->ai->extract_booking_fields($message, $session);
+		if (empty($extracted['success']) || empty($extracted['fields'])) {
+			return $session;
+		}
+
+		$fields = $extracted['fields'];
+		$data = $session['collected_data'];
+
+		// Pickup — validate before storing
+		if (!empty($fields['pickup']) && empty($data['pickup_address'])) {
+			if ($this->looks_like_real_place($fields['pickup'])) {
+				$resolved = $this->resolve_place_text($fields['pickup']);
+				if ($resolved) {
+					$data['pickup_address'] = $resolved;
+				} elseif ($this->is_broad_location_request($fields['pickup'])) {
+					$data['pending_pickup_city'] = $this->broad_location_name($fields['pickup']);
+				}
+			}
+		}
+
+		// Dropoff — validate before storing
+		if (!empty($fields['dropoff']) && empty($data['dropoff_address'])) {
+			if ($this->looks_like_real_place($fields['dropoff'])) {
+				$resolved = $this->resolve_place_text($fields['dropoff']);
+				if ($resolved) {
+					$data['dropoff_address'] = $resolved;
+				} elseif ($this->is_broad_location_request($fields['dropoff'])) {
+					$data['pending_dropoff_city'] = $this->broad_location_name($fields['dropoff']);
+				}
+			}
+		}
+
+		// Numeric fields
+		if (isset($fields['passenger_count']) && empty($data['passengers']) && $fields['passenger_count'] >= 1 && $fields['passenger_count'] <= 16) {
+			$data['passengers'] = $fields['passenger_count'];
+		}
+
+		if (isset($fields['luggage_count']) && !isset($data['luggage']) && $fields['luggage_count'] >= 0 && $fields['luggage_count'] <= 30) {
+			$data['luggage'] = $fields['luggage_count'];
+		}
+
+		// Contact fields
+		if (!empty($fields['customer_name']) && empty($data['customer_name']) && $this->valid_customer_name($fields['customer_name'])) {
+			$data['customer_name'] = sanitize_text_field($fields['customer_name']);
+		}
+
+		if (!empty($fields['customer_phone']) && empty($data['customer_phone']) && $this->valid_phone($fields['customer_phone'])) {
+			$data['customer_phone'] = sanitize_text_field($fields['customer_phone']);
+		}
+
+		// Time
+		if (!empty($fields['pickup_time']) && empty($data['pickup_time'])) {
+			$normalized = $this->normalize_pickup_time($fields['pickup_time']);
+			if ($normalized) {
+				$data['pickup_time'] = $normalized;
+			}
+		}
+
+		$session['collected_data'] = $data;
+
+		// Advance state based on what we now have
+		$state = (string) ($session['state'] ?? 'greeting');
+		if (in_array($state, ['greeting', 'capture_pickup'], true) && !empty($data['pickup_address']) && !empty($data['dropoff_address'])) {
+			$session['state'] = 'quote_requested';
+		} elseif (in_array($state, ['greeting', 'capture_pickup'], true) && !empty($data['pickup_address'])) {
+			$session['state'] = 'capture_dropoff';
+		}
+
+		return $session;
+	}
+
 	private function classify_turn(string $message, array $session): array {
 		$local = $this->local_classify_turn($message, $session);
 		$remote = $this->ai->classify_turn($message, $session);
@@ -792,6 +898,30 @@ final class ConversationEngine {
 	}
 
 	private function handle_interruption(array $session, string $message): ?array {
+		// Global: contact/phone/email query works from any state
+		if (preg_match('/\b(contact|reach|call|email|phone number|who do i call|speak to someone|human|dispatch number|your number|get in touch)\b/i', $message)
+			&& !preg_match('/\b(pickup|drop|station|airport|hotel|address)\b/i', $message)) {
+			$phone = trim((string) \RideFleetAIChatbot\Support\Options::get('dispatch_contact_number', ''));
+			$email = trim((string) \RideFleetAIChatbot\Support\Options::get('notification_email', get_option('admin_email', '')));
+			$parts = [];
+			if ($phone) {
+				$parts[] = sprintf(__('Phone: %s', 'ridefleet-ai-chatbot'), $phone);
+			}
+
+			if ($email) {
+				$parts[] = sprintf(__('Email: %s', 'ridefleet-ai-chatbot'), $email);
+			}
+
+			$contact_text = $parts ? implode(' · ', $parts) : __('Please check the company website for contact details.', 'ridefleet-ai-chatbot');
+			return $this->reply_with_next_step($session, sprintf(__('You can reach us at: %s', 'ridefleet-ai-chatbot'), $contact_text));
+		}
+
+		// Global: admin FAQ answers
+		$faq_answer = $this->match_faq($message);
+		if (null !== $faq_answer) {
+			return $this->reply_with_next_step($session, $faq_answer);
+		}
+
 		if ($this->extract_route($message)['pickup_address']) {
 			return null;
 		}
@@ -880,6 +1010,46 @@ final class ConversationEngine {
 
 		if ($this->is_smalltalk($message)) {
 			return $this->reply_with_next_step($session, $this->smalltalk_reply($message, $session));
+		}
+
+		if ('confirm_price' === $session['state']) {
+			// Mid-flow passenger/luggage correction
+			$new_pax = null;
+			$new_lug = null;
+			if (preg_match('/\b(\d{1,2})\s+(?:passenger|people|person|pax|travell?er|adult|kid|child)\b/i', $message, $m)) {
+				$new_pax = (int) $m[1];
+			} elseif (preg_match('/\b(?:passenger|people|person|pax|travell?er)\b.*?\b(\d{1,2})\b/i', $message, $m)) {
+				$new_pax = (int) $m[1];
+			}
+
+			if (preg_match('/\b(\d{1,2})\s+(?:bag|luggage|suitcase|piece)\b/i', $message, $m)) {
+				$new_lug = (int) $m[1];
+			} elseif (preg_match('/\b(?:bag|luggage|suitcase)\b.*?\b(\d{1,2})\b/i', $message, $m)) {
+				$new_lug = (int) $m[1];
+			}
+
+			if (null !== $new_pax || null !== $new_lug) {
+				$data = $session['collected_data'];
+				if (null !== $new_pax && $new_pax >= 1 && $new_pax <= 16) {
+					$data['passengers'] = $new_pax;
+				}
+
+				if (null !== $new_lug && $new_lug >= 0 && $new_lug <= 30) {
+					$data['luggage'] = $new_lug;
+				}
+
+				$session['collected_data'] = $data;
+				$session['state'] = 'quote_requested';
+				$lang = (string) ($data['language'] ?? 'en');
+				$note = 'fr' === $lang
+					? __('Bien sur. Je recalcule le prix avec les nouvelles informations.', 'ridefleet-ai-chatbot')
+					: ('nl' === $lang
+						? __('Geen probleem. Ik bereken de prijs opnieuw met de nieuwe gegevens.', 'ridefleet-ai-chatbot')
+						: __('No problem. Let me recalculate with the updated details.', 'ridefleet-ai-chatbot'));
+				$recalc = $this->quote_trip($session);
+				$recalc['message'] = $note . ' ' . $recalc['message'];
+				return $recalc;
+			}
 		}
 
 		if ('confirm_price' === $session['state'] && !$this->is_affirmative($message) && !$this->is_negative($message)) {
@@ -1169,6 +1339,10 @@ final class ConversationEngine {
 		return 1 === preg_match('/\b(book|create|start|make)\b.*\b(new|another)\b.*\b(one|ride|booking|trip)?\b|\bnew one\b/i', $message);
 	}
 
+	private function asks_return_trip(string $message): bool {
+		return 1 === preg_match('/\b(return|back|reverse|round\s*trip|retour|terugrit|terug|aller[\s\-]retour)\b/i', $message);
+	}
+
 	private function is_cancel(string $message): bool {
 		return 1 === preg_match('/\b(cancel|stop|forget it|never mind|nevermind)\b/i', $message);
 	}
@@ -1397,6 +1571,47 @@ final class ConversationEngine {
 		return 1 === preg_match('/\b(less|cheaper|discount|lower|too much|expensive|negotiate|deal|counteroffer|bucks?|dollars?|propose|lower fare|fare|price|cost|\$\d|\d+\s*(?:bucks?|dollars?|eur|euro))\b/i', $message);
 	}
 
+	/**
+	 * Checks the message against admin-configured FAQ pairs.
+	 * Returns the answer string or null if no match.
+	 */
+	private function match_faq(string $message): ?string {
+		$raw = \RideFleetAIChatbot\Support\Options::get('faq_items', []);
+		if (!is_array($raw) || empty($raw)) {
+			return null;
+		}
+
+		$message_lower = strtolower(trim($message));
+		foreach ($raw as $item) {
+			$question = strtolower(trim((string) ($item['question'] ?? '')));
+			$answer = trim((string) ($item['answer'] ?? ''));
+			if ('' === $question || '' === $answer) {
+				continue;
+			}
+
+			// Simple keyword overlap: split question into words and check how many appear in the message
+			$words = array_filter(preg_split('/\s+/', $question), fn($w) => strlen($w) > 3);
+			if (empty($words)) {
+				continue;
+			}
+
+			$hits = 0;
+			foreach ($words as $word) {
+				if (false !== strpos($message_lower, $word)) {
+					$hits++;
+				}
+			}
+
+			// Match if ≥60% of significant words present, or all words if ≤3 words
+			$threshold = count($words) <= 3 ? count($words) : (int) ceil(count($words) * 0.6);
+			if ($hits >= $threshold) {
+				return $answer;
+			}
+		}
+
+		return null;
+	}
+
 	private function valid_phone(string $message): bool {
 		$digits = preg_replace('/\D+/', '', $message);
 		if (!is_string($digits) || strlen($digits) > 16) {
@@ -1444,6 +1659,76 @@ final class ConversationEngine {
 		$value = preg_replace('/\baujourd\'?hui\b/i', 'today', (string) $value);
 		$value = preg_replace('/\bovermorgen\b/i', '+2 days', (string) $value);
 		$value = preg_replace('/\bapres[-\s]?demain\b/i', '+2 days', (string) $value);
+		// Relative-hour expressions: "in 2 hours", "in 30 minutes"
+		if (preg_match('/\bin\s+(\d+(?:\.\d+)?)\s+(hour|hr|hours|hrs)\b/i', (string) $value, $hm)) {
+			$ts = current_time('timestamp') + (int) round((float) $hm[1] * 3600);
+			return wp_date('Y-m-d H:i:s', $ts);
+		}
+
+		if (preg_match('/\bin\s+(\d+)\s+(?:minute|min|minutes|mins)\b/i', (string) $value, $hm)) {
+			$ts = current_time('timestamp') + (int) $hm[1] * 60;
+			if ($ts <= current_time('timestamp') + 4 * 60) {
+				return '';
+			}
+
+			return wp_date('Y-m-d H:i:s', $ts);
+		}
+
+		// "tonight", "this morning", "this afternoon", "this evening" + optional time
+		if (preg_match('/\b(tonight|this\s+evening)\b(?:\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?(?:\s*([ap]m?))?)?/i', (string) $value, $hm)) {
+			$hour = isset($hm[2]) && '' !== $hm[2] ? (int) $hm[2] : 20;
+			$min = isset($hm[3]) && '' !== $hm[3] ? (int) $hm[3] : 0;
+			if (isset($hm[4]) && preg_match('/^pm?$/i', $hm[4]) && $hour < 12) {
+				$hour += 12;
+			}
+
+			$ts = strtotime(wp_date('Y-m-d') . sprintf(' %02d:%02d', $hour, $min));
+			if ($ts && $ts > current_time('timestamp')) {
+				return wp_date('Y-m-d H:i:s', $ts);
+			}
+		}
+
+		if (preg_match('/\bthis\s+(morning)\b(?:\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?)?/i', (string) $value, $hm)) {
+			$hour = isset($hm[2]) && '' !== $hm[2] ? (int) $hm[2] : 9;
+			$min = isset($hm[3]) && '' !== $hm[3] ? (int) $hm[3] : 0;
+			$ts = strtotime(wp_date('Y-m-d') . sprintf(' %02d:%02d', $hour, $min));
+			if ($ts && $ts > current_time('timestamp')) {
+				return wp_date('Y-m-d H:i:s', $ts);
+			}
+		}
+
+		if (preg_match('/\bthis\s+(afternoon)\b(?:\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?)?/i', (string) $value, $hm)) {
+			$hour = isset($hm[2]) && '' !== $hm[2] ? (int) $hm[2] : 14;
+			$min = isset($hm[3]) && '' !== $hm[3] ? (int) $hm[3] : 0;
+			$ts = strtotime(wp_date('Y-m-d') . sprintf(' %02d:%02d', $hour, $min));
+			if ($ts && $ts > current_time('timestamp')) {
+				return wp_date('Y-m-d H:i:s', $ts);
+			}
+		}
+
+		// "around 6", "at 6pm" without a date — assume today if in future, else tomorrow
+		if (preg_match('/\b(?:around|at)?\s*(\d{1,2})(?::(\d{2}))?\s*([ap]m?)?\b/i', (string) $value, $hm)
+			&& !preg_match('/\d{4}|\btoday\b|\btomorrow\b|\bnext\b|\bmon\b|\btue\b|\bwed\b|\bthu\b|\bfri\b|\bsat\b|\bsun\b/i', (string) $value)) {
+			$hour = (int) $hm[1];
+			$min = isset($hm[2]) && '' !== $hm[2] ? (int) $hm[2] : 0;
+			if (isset($hm[3]) && preg_match('/^pm?$/i', $hm[3]) && $hour < 12) {
+				$hour += 12;
+			}
+
+			if (isset($hm[3]) && preg_match('/^am?$/i', $hm[3]) && $hour === 12) {
+				$hour = 0;
+			}
+
+			$ts = strtotime(wp_date('Y-m-d') . sprintf(' %02d:%02d', $hour, $min));
+			if ($ts && $ts > current_time('timestamp')) {
+				return wp_date('Y-m-d H:i:s', $ts);
+			}
+
+			if ($ts) {
+				return wp_date('Y-m-d H:i:s', strtotime('+1 day', $ts));
+			}
+		}
+
 		$value = preg_replace('/\bom\s+(\d{1,2}:\d{2})\b/i', '$1', (string) $value);
 		$value = preg_replace('/\ba\s+(\d{1,2}:\d{2})\b/i', '$1', (string) $value);
 		$value = preg_replace('/\b(morning|afternoon|evening|night)\s+(?=\d{1,2}:\d{2}\b)/i', '', (string) $value);
@@ -1490,6 +1775,10 @@ final class ConversationEngine {
 		}
 
 		if (!$this->looks_like_location($text)) {
+			return '';
+		}
+
+		if (!$this->looks_like_real_place($text)) {
 			return '';
 		}
 
@@ -1617,6 +1906,31 @@ final class ConversationEngine {
 		}
 
 		return ucwords($candidate);
+	}
+
+	/**
+	 * Returns false when an AI-extracted string is clearly NOT a place name —
+	 * e.g. a sentence fragment, question, or verb phrase.
+	 */
+	private function looks_like_real_place(string $text): bool {
+		if (strlen($text) < 2 || strlen($text) > 200) {
+			return false;
+		}
+
+		// Contains common verbs/question words that would never appear in a real address
+		if (preg_match('/\b(talk|speak|want|would|could|should|did|does|done|are|were|have|has|had|can|will|shall|may|might|must|need|tell|ask|give|get|go|come|call|help|contact|reach|find|know|think|feel|mean|said|say|before|after|please|sorry|thanks|thank|hello|hi|hey)\b/i', $text)) {
+			// Forgive "before" / "after" only if there is a clear location signal too
+			if (!$this->has_location_signal($text)) {
+				return false;
+			}
+		}
+
+		// Starts with a question word
+		if (preg_match('/^\s*(what|where|who|why|how|which|when|is|are|do|does|did|can|could|would|should|may|might)\b/i', $text)) {
+			return false;
+		}
+
+		return true;
 	}
 
 	private function is_broad_prediction(string $text, mixed $prediction): bool {

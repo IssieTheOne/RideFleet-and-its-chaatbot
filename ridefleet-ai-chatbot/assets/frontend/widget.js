@@ -395,7 +395,8 @@
 				replies = [{ label: 'No extras, continue', value: 'no extras' }];
 			} else if (state === 'complete') {
 				replies = [
-					{ label: 'Book another ride', value: 'new booking', primary: true },
+					{ label: 'Book return trip', value: 'I would like to book the return trip', primary: true },
+					{ label: 'New booking', value: 'new booking' },
 					{ label: 'Modify this booking', value: 'I want to change my booking' }
 				];
 			} else {
@@ -544,6 +545,17 @@
 						setStoredSessionId(payload.session_id);
 					}
 					appendMessage(messages, payload.message || 'I can help you book a taxi ride.', 'bot');
+					// Show route summary once both locations are known
+					var d = payload.data || {};
+					var summaryEl = document.getElementById('rfac-route-summary');
+					if (summaryEl) {
+						var pickup = (d.collected && d.collected.pickup_address) || '';
+						var dropoff = (d.collected && d.collected.dropoff_address) || '';
+						if (pickup && dropoff) {
+							summaryEl.textContent = pickup + ' → ' + dropoff;
+							summaryEl.hidden = false;
+						}
+					}
 					appendInfoCard(messages, payload);
 					appendActionCard(messages, payload, closeWidget, sendText);
 					setState(payload.state);

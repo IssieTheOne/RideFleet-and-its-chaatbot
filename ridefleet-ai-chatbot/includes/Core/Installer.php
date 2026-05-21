@@ -209,6 +209,7 @@ final class Installer {
 			'session_signing_secret' => '',
 			'update_endpoint' => '',
 			'license_key' => '',
+			'faq_items' => [],
 			'chatbot_ui_theme' => [
 				'primary' => '#0f766e',
 				'primary_dark' => '#0b5f59',

@@ -43,6 +43,7 @@ final class Options {
 			'update_endpoint',
 			'license_key',
 			'chatbot_ui_theme',
+			'faq_items',
 		];
 
 		$next = $current;

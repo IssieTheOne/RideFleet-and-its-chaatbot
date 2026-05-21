@@ -176,6 +176,19 @@ final class Admin {
 			$notification_email = '';
 		}
 
+		// FAQ items — parallel array from form
+		$faq_items = [];
+		$raw_questions = array_values(array_filter((array) ($_POST['faq_question'] ?? []), 'is_string'));
+		$raw_answers   = array_values(array_filter((array) ($_POST['faq_answer']   ?? []), 'is_string'));
+		$count = min(count($raw_questions), count($raw_answers), 10);
+		for ($i = 0; $i < $count; $i++) {
+			$q = sanitize_text_field($raw_questions[$i]);
+			$a = sanitize_textarea_field($raw_answers[$i]);
+			if ('' !== $q && '' !== $a) {
+				$faq_items[] = ['question' => $q, 'answer' => $a];
+			}
+		}
+
 		Options::update(
 			[
 				'openrouter_key' => $key,
@@ -195,6 +208,7 @@ final class Admin {
 					'text' => sanitize_hex_color(wp_unslash($_POST['theme_text'] ?? '#17202a')) ?: '#17202a',
 					'muted' => sanitize_hex_color(wp_unslash($_POST['theme_muted'] ?? '#64748b')) ?: '#64748b',
 				],
+				'faq_items' => $faq_items,
 			]
 		);
 
@@ -553,6 +567,34 @@ final class Admin {
 					<p><?php esc_html_e('Place this shortcode on any customer-facing page:', 'ridefleet-ai-chatbot'); ?></p>
 					<code>[ridefleet_ai_chatbot]</code>
 				</section>
+
+				<!-- FAQ section -->
+				<div class="rfac-card rfac-card--faq">
+					<h2 class="rfac-card__title"><?php esc_html_e( 'Custom FAQ Answers', 'ridefleet-ai-chatbot' ); ?></h2>
+					<p class="rfac-card__subtitle"><?php esc_html_e( 'Up to 10 Q&A pairs. When a customer message matches a question, the chatbot answers instantly without using AI.', 'ridefleet-ai-chatbot' ); ?></p>
+					<div id="rfac-faq-list" class="rfac-faq-list">
+<?php
+$faq_items = (array) \RideFleetAIChatbot\Support\Options::get( 'faq_items', [] );
+if ( empty( $faq_items ) ) {
+	$faq_items = [ [ 'question' => '', 'answer' => '' ] ];
+}
+foreach ( $faq_items as $idx => $item ) :
+	$q = esc_attr( (string) ( $item['question'] ?? '' ) );
+	$a = esc_textarea( (string) ( $item['answer'] ?? '' ) );
+?>
+						<div class="rfac-faq-row" data-index="<?php echo esc_attr( (string) $idx ); ?>">
+							<div class="rfac-faq-row__fields">
+								<input type="text" name="faq_question[]" value="<?php echo $q; ?>" placeholder="<?php esc_attr_e( 'Question keyword(s), e.g. service area, payment methods', 'ridefleet-ai-chatbot' ); ?>" class="rfac-faq-row__question" />
+								<textarea name="faq_answer[]" rows="2" placeholder="<?php esc_attr_e( 'Answer the chatbot will give', 'ridefleet-ai-chatbot' ); ?>" class="rfac-faq-row__answer"><?php echo $a; ?></textarea>
+							</div>
+							<button type="button" class="rfac-faq-row__remove button" title="<?php esc_attr_e( 'Remove', 'ridefleet-ai-chatbot' ); ?>">✕</button>
+						</div>
+<?php endforeach; ?>
+					</div>
+					<button type="button" id="rfac-faq-add" class="button rfac-faq-add" <?php echo count($faq_items) >= 10 ? 'disabled' : ''; ?>>
+						<?php esc_html_e( '+ Add FAQ item', 'ridefleet-ai-chatbot' ); ?>
+					</button>
+				</div>
 
 				<p class="submit">
 					<button class="button button-primary" type="submit"><?php esc_html_e('Save Chatbot Settings', 'ridefleet-ai-chatbot'); ?></button>

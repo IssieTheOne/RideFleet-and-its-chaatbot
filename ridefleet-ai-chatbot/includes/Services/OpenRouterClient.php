@@ -35,12 +35,16 @@ final class OpenRouterClient {
 		$state = sanitize_key((string) ($session['state'] ?? 'greeting'));
 		$data = is_array($session['collected_data'] ?? null) ? $session['collected_data'] : [];
 		$language = sanitize_key((string) ($data['language'] ?? ''));
-		$system = 'You classify one customer message for a taxi booking chatbot. Return strict JSON only. '
-			. 'Allowed intents: smalltalk, location, confirmation, question, edit_request, cancel, price_negotiation, time, name, phone, passenger_count, luggage_count, extras, vehicle_choice, unknown. '
-			. 'Only mark location when the message clearly contains a pickup/dropoff place, address, station, airport, hotel, landmark, or broad city. '
-			. 'Do not treat jokes, greetings, questions, "geen idee", "maak niet uit", or vague words as location. '
-			. 'Never invent or reinterpret saved state. If state is capture_dropoff, do not output pickup unless the user explicitly gives a full route with from/to. '
-			. 'Use null for missing fields. Fields: intent, confidence (0-1), language (en/fr/nl/unknown), pickup, dropoff, proposed_price, pickup_time, name, phone, passenger_count, luggage_count, extras, vehicle_choice, booking_id, question_type, reply_tone, admin_summary_en.';
+		$system = 'You are an intent classifier for a taxi booking chatbot. Return strict JSON only — no prose. '
+			. 'Allowed intents: smalltalk, location, confirmation, question, edit_request, cancel, time, name, phone, passenger_count, luggage_count, extras, vehicle_choice, unknown. '
+			. 'CRITICAL RULES for location intent: '
+			. '(1) Only use location intent when the message clearly contains a named place — an address, street, station, airport, hotel, city, or landmark. '
+			. '(2) NEVER classify a message as location if it is a question ("what", "where", "who", "why", "how", "which", "when"), a greeting, a sentence about language, a complaint, or a general statement. '
+			. '(3) If the extracted pickup or dropoff field would contain a verb phrase, question fragment, or non-place text (e.g. "talk to me", "you before", "are you done", "contact please"), set that field to null and use intent=question or intent=unknown instead. '
+			. '(4) If state is capture_dropoff, do not output a pickup field unless the user explicitly provides a full "from X to Y" route. '
+			. 'Extract every booking field visible in the message: pickup, dropoff, passenger_count, luggage_count, pickup_time, name, phone. Multiple fields in one message is valid and encouraged. '
+			. 'Use null for any field not clearly present. '
+			. 'JSON fields: intent, confidence (0–1), language (en/fr/nl/unknown), pickup, dropoff, pickup_time, name, phone, passenger_count, luggage_count, extras, vehicle_choice, booking_id, question_type, reply_tone (neutral/playful/urgent), admin_summary_en.';
 		$user = wp_json_encode(
 			[
 				'state' => $state,
@@ -81,6 +85,93 @@ final class OpenRouterClient {
 		}
 
 		return ['success' => true, 'data' => $this->normalize_classification($decoded['data'])];
+	}
+
+	/**
+	 * One-shot field extractor: asks the AI to pull every booking field it can see
+	 * from a single user message. Used for greedy intake so users can say everything
+	 * in one sentence and skip individual capture states.
+	 */
+	public function extract_booking_fields(string $message, array $session): array {
+		$key = (string) Options::get('openrouter_key', '');
+		if (!$this->valid_key($key)) {
+			return ['success' => false];
+		}
+
+		if (UsageMeter::circuit_open() || UsageMeter::over_budget()) {
+			return ['success' => false];
+		}
+
+		$data = is_array($session['collected_data'] ?? null) ? $session['collected_data'] : [];
+		$system = 'Extract every taxi booking field visible in the user message. Return strict JSON only. '
+			. 'Fields (all optional, use null if not present): '
+			. 'pickup (string — place name or address), '
+			. 'dropoff (string — place name or address), '
+			. 'passenger_count (integer), '
+			. 'luggage_count (integer), '
+			. 'pickup_time (string — preserve the user\'s original wording, e.g. "tomorrow 9am", "tonight at 8", "in 2 hours"), '
+			. 'customer_name (string — full name only, not a place), '
+			. 'customer_phone (string — digits / formatted phone). '
+			. 'IMPORTANT: only set pickup/dropoff when the value is clearly a real place name, address, or landmark. '
+			. 'Never set pickup/dropoff to verb phrases, questions, or non-place text. '
+			. 'If a field cannot be confidently extracted, use null.';
+
+		$already = [];
+		foreach (['pickup_address' => 'pickup', 'dropoff_address' => 'dropoff', 'passengers' => 'passenger_count', 'luggage' => 'luggage_count', 'pickup_time' => 'pickup_time', 'customer_name' => 'customer_name', 'customer_phone' => 'customer_phone'] as $stored => $label) {
+			if (!empty($data[$stored])) {
+				$already[] = $label . '=' . $data[$stored];
+			}
+		}
+
+		$context = $already ? 'Already captured: ' . implode(', ', $already) . '. Only extract what is NEW.' : 'Nothing captured yet.';
+
+		$response = wp_remote_post(
+			'https://openrouter.ai/api/v1/chat/completions',
+			[
+				'timeout' => 10,
+				'redirection' => 0,
+				'headers' => [
+					'Authorization' => 'Bearer ' . $key,
+					'Content-Type' => 'application/json',
+					'HTTP-Referer' => home_url(),
+					'X-Title' => get_bloginfo('name') . ' RideFleet Field Extractor',
+				],
+				'body' => wp_json_encode(
+					[
+						'model' => sanitize_text_field((string) Options::get('selected_model', 'openai/gpt-4o-mini')),
+						'messages' => [
+							['role' => 'system', 'content' => $system],
+							['role' => 'user', 'content' => $context . "\n\nCustomer message: " . $message],
+						],
+						'temperature' => 0,
+						'max_tokens' => 200,
+						'response_format' => ['type' => 'json_object'],
+					]
+				),
+			]
+		);
+
+		$decoded = $this->decode_json_response($response);
+		if (empty($decoded['success']) || !is_array($decoded['data'] ?? null)) {
+			return ['success' => false];
+		}
+
+		$raw = $decoded['data'];
+		$clean = [];
+		foreach (['pickup', 'dropoff', 'pickup_time', 'customer_name', 'customer_phone'] as $field) {
+			$val = $this->clean_field($raw[$field] ?? null);
+			if (null !== $val) {
+				$clean[$field] = $val;
+			}
+		}
+
+		foreach (['passenger_count', 'luggage_count'] as $field) {
+			if (is_numeric($raw[$field] ?? null) && (int) $raw[$field] >= 0) {
+				$clean[$field] = (int) $raw[$field];
+			}
+		}
+
+		return ['success' => true, 'fields' => $clean];
 	}
 
 	public function system_prompt(): string {
@@ -251,7 +342,7 @@ final class OpenRouterClient {
 	}
 
 	private function normalize_classification(array $data): array {
-		$allowed = ['smalltalk', 'location', 'confirmation', 'question', 'edit_request', 'cancel', 'price_negotiation', 'time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'unknown'];
+		$allowed = ['smalltalk', 'location', 'confirmation', 'question', 'edit_request', 'cancel', 'time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'unknown'];
 		$intent = sanitize_key((string) ($data['intent'] ?? 'unknown'));
 		if (!in_array($intent, $allowed, true)) {
 			$intent = 'unknown';

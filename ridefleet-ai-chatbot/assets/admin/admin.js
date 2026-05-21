@@ -169,5 +169,46 @@
 				}
 			});
 		});
+
+		// ── FAQ builder ──────────────────────────────────────────────────────────
+		var faqList = document.getElementById('rfac-faq-list');
+		var faqAdd  = document.getElementById('rfac-faq-add');
+
+		function faqRowHtml(idx) {
+			return '<div class="rfac-faq-row" data-index="' + idx + '">'
+				+ '<div class="rfac-faq-row__fields">'
+				+ '<input type="text" name="faq_question[]" value="" placeholder="Question keyword(s), e.g. service area, payment methods" class="rfac-faq-row__question" />'
+				+ '<textarea name="faq_answer[]" rows="2" placeholder="Answer the chatbot will give" class="rfac-faq-row__answer"></textarea>'
+				+ '</div>'
+				+ '<button type="button" class="rfac-faq-row__remove button" title="Remove">✕</button>'
+				+ '</div>';
+		}
+
+		function updateFaqAddBtn() {
+			if (!faqAdd || !faqList) return;
+			faqAdd.disabled = faqList.querySelectorAll('.rfac-faq-row').length >= 10;
+		}
+
+		if (faqList) {
+			faqList.addEventListener('click', function(e) {
+				var btn = e.target.closest('.rfac-faq-row__remove');
+				if (!btn) return;
+				var row = btn.closest('.rfac-faq-row');
+				if (row && faqList.querySelectorAll('.rfac-faq-row').length > 1) {
+					row.remove();
+					updateFaqAddBtn();
+				}
+			});
+		}
+
+		if (faqAdd) {
+			faqAdd.addEventListener('click', function() {
+				if (!faqList) return;
+				var rows = faqList.querySelectorAll('.rfac-faq-row');
+				if (rows.length >= 10) return;
+				faqList.insertAdjacentHTML('beforeend', faqRowHtml(rows.length));
+				updateFaqAddBtn();
+			});
+		}
 	});
 })();

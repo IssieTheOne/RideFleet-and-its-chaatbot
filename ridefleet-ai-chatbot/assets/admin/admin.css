@@ -1002,3 +1002,60 @@
 		grid-template-columns: repeat(2, minmax(120px, 1fr));
 	}
 }
+
+/* ── FAQ section ─────────────────────────────────────────────────────────── */
+.rfac-card--faq {}
+
+.rfac-faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rfac-faq-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.rfac-faq-row__fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rfac-faq-row__question {
+  width: 100%;
+  font-size: 13px;
+}
+
+.rfac-faq-row__answer {
+  width: 100%;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 48px;
+}
+
+.rfac-faq-row__remove {
+  flex-shrink: 0;
+  color: #ef4444 !important;
+  border-color: #fca5a5 !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  height: 28px !important;
+  margin-top: 2px;
+}
+
+.rfac-faq-row__remove:hover {
+  background: #fef2f2 !important;
+}
+
+.rfac-faq-add {
+  font-size: 13px;
+}
