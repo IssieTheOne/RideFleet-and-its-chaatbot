@@ -103,9 +103,22 @@ $top_customers = self::get_top_customers();
 <canvas id="rfb-vehicle-chart" height="80"></canvas>
 </div>
 
-<div class="rfb-panel">
+<?php
+$airlabs_key  = trim((string) \RideFleetBooking\Support\Options::get('airlabs_api_key', ''));
+$airlabs_iata = strtoupper(trim((string) \RideFleetBooking\Support\Options::get('airlabs_default_iata', '')));
+$show_flights_widget = '' !== $airlabs_key && '' !== $airlabs_iata;
+?>
+<div class="rfb-panel rfb-panel--flights-widget">
+<?php if ($show_flights_widget): ?>
+<h2 style="margin-bottom:10px;">
+	✈ <?php printf(esc_html__('Arrivals — %s', 'ridefleet-booking'), '<strong>' . esc_html($airlabs_iata) . '</strong>'); ?>
+	<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-flights&iata=' . $airlabs_iata)); ?>" style="font-size:12px;font-weight:400;margin-left:8px;color:var(--rfb-accent);"><?php esc_html_e('View all →', 'ridefleet-booking'); ?></a>
+</h2>
+<?php \RideFleetBooking\Admin\FlightTrackerPage::dashboard_widget(); ?>
+<?php else: ?>
 <h2><?php esc_html_e('Top Customers by Spend', 'ridefleet-booking'); ?></h2>
 <canvas id="rfb-customers-chart" height="80"></canvas>
+<?php endif; ?>
 </div>
 </div>
 
@@ -144,19 +157,12 @@ $top_customers = self::get_top_customers();
 </div>
 </div>
 
-<?php if ('' !== trim((string) \RideFleetBooking\Support\Options::get('airlabs_api_key', ''))): ?>
-<div class="rfb-ops-grid" style="grid-template-columns:1fr;">
-	<div class="rfb-panel">
-		<?php
-		$def_iata = strtoupper(trim((string) \RideFleetBooking\Support\Options::get('airlabs_default_iata', '')));
-		?>
-		<h2><?php printf(esc_html__('Upcoming Arrivals%s', 'ridefleet-booking'), $def_iata ? ' — ' . esc_html($def_iata) : ''); ?>
-			<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-flights' . ($def_iata ? '&iata=' . $def_iata : ''))); ?>" style="font-size:12px;font-weight:400;margin-left:10px;">
-				<?php esc_html_e('View all →', 'ridefleet-booking'); ?>
-			</a>
-		</h2>
-		<?php FlightTrackerPage::dashboard_widget(); ?>
-	</div>
+<?php if ($show_flights_widget): ?>
+<div class="rfb-charts-grid" style="grid-template-columns:1fr;">
+<div class="rfb-panel">
+<h2><?php esc_html_e('Top Customers by Spend', 'ridefleet-booking'); ?></h2>
+<canvas id="rfb-customers-chart" height="80"></canvas>
+</div>
 </div>
 <?php endif; ?>
 

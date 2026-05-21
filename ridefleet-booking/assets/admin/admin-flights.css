@@ -1,6 +1,5 @@
-/* ── Flight Tracker / FIDS board ── */
+/* ── Flight Tracker / FIDS board ─────────────────────────────────────── */
 
-/* Full-width flight board panel */
 .rfb-flights-board {
     padding: 0;
     overflow: hidden;
@@ -14,18 +13,18 @@
 }
 
 .rfb-fids-table thead tr {
-    background: #f8fafc;
-    border-bottom: 2px solid #e2e8f0;
+    background: #17202a;
+    border-bottom: none;
 }
 
 .rfb-fids-table thead th {
-    padding: 10px 14px;
+    padding: 10px 16px;
     text-align: left;
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: .06em;
-    color: #64748b;
+    letter-spacing: .1em;
+    color: #7dd3c7;
 }
 
 .rfb-fids-table tbody tr {
@@ -33,93 +32,53 @@
     transition: background .1s;
 }
 
-.rfb-fids-table tbody tr:hover {
-    background: #f8fafc;
-}
+.rfb-fids-table tbody tr:last-child { border-bottom: none; }
+.rfb-fids-table tbody tr:hover { background: #f8fafc; }
 
 .rfb-fids-table td {
-    padding: 10px 14px;
+    padding: 11px 16px;
     vertical-align: middle;
 }
 
-/* Past flights — airport board style */
-.rfb-fids-row--past {
-    opacity: .5;
-    background: #f8fafc;
-}
+/* Past flights */
+.rfb-fids-row--past { opacity: .45; background: #f8fafc; }
+.rfb-fids-row--past td { color: #94a3b8; }
 
-.rfb-fids-row--past td {
-    color: #94a3b8;
-}
-
-/* Active / in-air flights */
-.rfb-fids-row--active {
-    background: #f0fdf4 !important;
-    opacity: 1 !important;
-}
-
-.rfb-fids-row--active td {
-    color: inherit !important;
-}
+/* Active flights */
+.rfb-fids-row--active { background: #f0fdf4 !important; opacity: 1 !important; }
 
 /* Cancelled */
-.rfb-fids-row--cancelled {
-    opacity: .45;
-    text-decoration: line-through;
-    background: #fef2f2;
+.rfb-fids-row--cancelled { opacity: .4; background: #fef2f2; }
+
+/* Airline cell */
+.rfb-fids-airline {
+    font-weight: 600;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 160px;
 }
 
-/* Time cell */
-.rfb-fids-time {
-    min-width: 100px;
+/* Live pulse dot */
+.rfb-fids-live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #16a34a;
+    flex-shrink: 0;
+    animation: rfb-pulse 1.4s infinite;
 }
+@keyframes rfb-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.85)} }
 
-.rfb-fids-time strong {
-    font-size: 16px;
+/* Flight number */
+.rfb-fids-flightnum {
+    font-size: 15px;
     font-weight: 800;
     color: #0f172a;
     font-variant-numeric: tabular-nums;
-}
-
-.rfb-fids-row--past .rfb-fids-time strong {
-    color: #94a3b8;
-}
-
-/* Delay badge */
-.rfb-fids-delay {
-    display: inline-block;
-    background: #fee2e2;
-    color: #dc2626;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 1px 6px;
-    border-radius: 8px;
-    margin-left: 4px;
-}
-
-/* PAST label */
-.rfb-fids-past-label {
-    display: inline-block;
-    background: #e2e8f0;
-    color: #94a3b8;
-    font-size: 9px;
-    font-weight: 800;
-    padding: 1px 5px;
-    border-radius: 6px;
-    letter-spacing: .06em;
-    margin-left: 4px;
-}
-
-/* Airline badge */
-.rfb-airline-badge {
-    display: inline-block;
-    background: #0f766e;
-    color: #fff;
-    font-size: 10px;
-    font-weight: 800;
-    padding: 2px 7px;
-    border-radius: 5px;
-    letter-spacing: .04em;
+    letter-spacing: .02em;
 }
 
 /* City name */
@@ -127,91 +86,138 @@
     display: block;
     font-size: 11px;
     color: #94a3b8;
+    font-weight: 400;
     margin-top: 1px;
 }
 
-/* Terminal + Gate badges */
-.rfb-fids-terminal {
+/* Time cell */
+.rfb-fids-time strong {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+.rfb-fids-row--past .rfb-fids-time strong { color: #94a3b8; }
+
+/* Actual time */
+.rfb-fids-actual {
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.rfb-fids-actual--early   { color: #16a34a; }
+.rfb-fids-actual--late    { color: #dc2626; }
+.rfb-fids-actual--ontime  { color: #64748b; }
+
+/* Remarks */
+.rfb-fids-remark {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+.rfb-remark--ontime   { background: #f0fdf4; color: #166534; }
+.rfb-remark--early    { background: #dcfce7; color: #15803d; }
+.rfb-remark--active   { background: #dcfce7; color: #166534; }
+.rfb-remark--landed   { background: #f1f5f9; color: #475569; }
+.rfb-remark--delayed  { background: #fee2e2; color: #dc2626; }
+.rfb-remark--cancelled{ background: #fee2e2; color: #dc2626; text-decoration: line-through; }
+.rfb-remark--diverted { background: #fef3c7; color: #92400e; }
+
+/* Gate badge */
+.rfb-fids-gate {
     display: inline-block;
     background: #dbeafe;
     color: #1d4ed8;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 8px;
-}
-
-.rfb-fids-gate {
-    display: inline-block;
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 8px;
-}
-
-.rfb-fids-none {
-    color: #cbd5e1;
-}
-
-/* Status badges */
-.rfb-fids-status {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 700;
+    border: 1px solid #bfdbfe;
+    font-size: 12px;
+    font-weight: 800;
     padding: 3px 10px;
-    border-radius: 12px;
-    text-transform: capitalize;
+    border-radius: 8px;
+    min-width: 32px;
+    text-align: center;
 }
-.rfb-fids-status--scheduled  { background: #dbeafe; color: #1d4ed8; }
-.rfb-fids-status--active     { background: #dcfce7; color: #166534; }
-.rfb-fids-status--landed     { background: #f1f5f9; color: #475569; }
-.rfb-fids-status--cancelled  { background: #fee2e2; color: #dc2626; }
-.rfb-fids-status--diverted,
-.rfb-fids-status--redirected { background: #fef9c3; color: #854d0e; }
-.rfb-fids-status--incident   { background: #fde68a; color: #92400e; }
-.rfb-fids-status--unknown    { background: #f1f5f9; color: #64748b; }
 
-/* NOW live indicator */
-.rfb-fids-now {
-    color: #16a34a;
+.rfb-fids-none { color: #cbd5e1; font-size: 13px; }
+
+/* Delay badge (used in dashboard widget) */
+.rfb-fids-delay {
+    display: inline-block;
+    background: #fee2e2;
+    color: #dc2626;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 6px;
+    margin-left: 3px;
+}
+
+/* Airline badge (used in dashboard widget) */
+.rfb-airline-badge {
+    display: inline-block;
+    background: #0f766e;
+    color: #fff;
     font-size: 10px;
     font-weight: 800;
-    animation: rfb-pulse 1.5s infinite;
-    margin-left: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: .03em;
 }
-@keyframes rfb-pulse { 0%,100%{opacity:1}50%{opacity:.4} }
 
-/* Dashboard widget flight list */
+/* Status badges (used in filter chips, fallback) */
+.rfb-fids-status { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; }
+.rfb-fids-status--scheduled { background:#dbeafe; color:#1d4ed8; }
+.rfb-fids-status--active    { background:#dcfce7; color:#166534; }
+.rfb-fids-status--landed    { background:#f1f5f9; color:#475569; }
+.rfb-fids-status--cancelled { background:#fee2e2; color:#dc2626; }
+.rfb-fids-status--diverted,.rfb-fids-status--redirected { background:#fef9c3; color:#854d0e; }
+
+/* ── Dashboard flight widget ─────────────────────────────────────────── */
+
 .rfb-widget-flights {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0;
     margin-top: 4px;
-}
-.rfb-widget-flight {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 10px;
+    border-radius: 8px;
+    overflow: hidden;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    background: #fbfcfd;
-    flex-wrap: wrap;
 }
+
+.rfb-widget-flight {
+    display: grid;
+    grid-template-columns: 48px 1fr 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    background: #fff;
+    transition: background .1s;
+}
+
+.rfb-widget-flight:last-child { border-bottom: none; }
+.rfb-widget-flight:hover { background: #f8fafc; }
+
 .rfb-widget-flight__time {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    min-width: 42px;
     color: #0f172a;
+    font-variant-numeric: tabular-nums;
 }
+
 .rfb-widget-flight__info {
-    flex: 1;
     font-size: 12px;
     min-width: 0;
+}
+
+.rfb-widget-flight__info strong { color: #0f172a; }
+.rfb-widget-flight__info span   { color: #94a3b8; margin-left: 4px; }
+
+.rfb-widget-flight__route {
+    font-size: 12px;
+    color: #64748b;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

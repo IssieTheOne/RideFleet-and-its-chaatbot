@@ -91,3 +91,13 @@
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }
+
+/* Flight widget inside charts grid */
+.rfb-panel--flights-widget {
+	overflow: hidden;
+	padding-bottom: 0;
+}
+.rfb-panel--flights-widget h2 {
+	padding-bottom: 10px;
+	border-bottom: 1px solid #f1f5f9;
+}

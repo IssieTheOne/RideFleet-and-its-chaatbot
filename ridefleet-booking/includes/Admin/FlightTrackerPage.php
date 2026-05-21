@@ -294,63 +294,92 @@ final class FlightTrackerPage {
                 <table class="rfb-fids-table">
                     <thead>
                         <tr>
-                            <th><?php esc_html_e('Time', 'ridefleet-booking'); ?></th>
-                            <th><?php esc_html_e('Flight', 'ridefleet-booking'); ?></th>
                             <th><?php esc_html_e('Airline', 'ridefleet-booking'); ?></th>
+                            <th><?php esc_html_e('Flight #', 'ridefleet-booking'); ?></th>
                             <th><?php echo esc_html('arr'===$type ? __('From', 'ridefleet-booking') : __('To', 'ridefleet-booking')); ?></th>
-                            <th><?php esc_html_e('Terminal', 'ridefleet-booking'); ?></th>
+                            <th><?php esc_html_e('Sched.', 'ridefleet-booking'); ?></th>
+                            <th><?php esc_html_e('Actual', 'ridefleet-booking'); ?></th>
+                            <th><?php esc_html_e('Remarks', 'ridefleet-booking'); ?></th>
                             <th><?php esc_html_e('Gate', 'ridefleet-booking'); ?></th>
-                            <th><?php esc_html_e('Status', 'ridefleet-booking'); ?></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($display_flights as $f):
-                            $is_past   = (bool)($f['_is_past']??false);
-                            $is_active = strtolower((string)($f['status']??'')) === 'active';
+                            $is_past      = (bool)($f['_is_past']??false);
+                            $is_active    = strtolower((string)($f['status']??'')) === 'active';
                             $is_cancelled = strtolower((string)($f['status']??'')) === 'cancelled';
                             $airline_code = strtoupper((string)($f['airline_iata'] ?? '??'));
                             $airline_name = self::AIRLINES[$airline_code] ?? $airline_code;
-                            $fnum         = (string)($f['flight_iata'] ?? $f['flight_icao'] ?? '—');
+
+                            // Strip the airline prefix from flight_iata to get just the number
+                            $raw_fnum = (string)($f['flight_iata'] ?? $f['flight_icao'] ?? '');
+                            $flight_number = preg_replace('/^[A-Z0-9]{2,3}(?=\d)/i', '', $raw_fnum);
+                            if (!$flight_number) $flight_number = $raw_fnum ?: '—';
+
                             $other_iata   = strtoupper((string)('arr'===$type ? ($f['dep_iata']??'—') : ($f['arr_iata']??'—')));
                             $other_info   = self::AIRPORTS[$other_iata] ?? null;
-                            $other_label  = $other_info ? ($other_info['city'] . ' (' . $other_iata . ')') : $other_iata;
                             $sched_t      = 'arr'===$type ? (string)($f['arr_time']??'') : (string)($f['dep_time']??'');
                             $sched_disp   = $sched_t ? wp_date('H:i', strtotime($sched_t)) : '—';
-                            $status       = strtolower((string)($f['status']??'scheduled'));
                             $delay        = (int)('arr'===$type ? ($f['arr_delayed']??0) : ($f['dep_delayed']??0));
-                            $terminal     = (string)('arr'===$type ? ($f['arr_terminal']??'') : ($f['dep_terminal']??''));
+                            $sched_ts     = $f['_ts'] ?? 0;
                             $gate         = (string)('arr'===$type ? ($f['arr_gate']??'') : ($f['dep_gate']??''));
-                            $row_class    = 'rfb-fids-row';
-                            if ($is_past) $row_class .= ' rfb-fids-row--past';
-                            if ($is_active) $row_class .= ' rfb-fids-row--active';
+
+                            // Actual time calculation
+                            if ($sched_ts > 0 && $delay !== 0) {
+                                $actual_ts    = $sched_ts + ($delay * 60);
+                                $actual_disp  = wp_date('H:i', $actual_ts);
+                                $actual_class = $delay < 0 ? 'rfb-fids-actual--early' : 'rfb-fids-actual--late';
+                            } elseif ($sched_ts > 0) {
+                                $actual_disp  = wp_date('H:i', $sched_ts);
+                                $actual_class = 'rfb-fids-actual--ontime';
+                            } else {
+                                $actual_disp  = '—';
+                                $actual_class = '';
+                            }
+
+                            // Remarks calculation
+                            $status_lc = strtolower((string)($f['status'] ?? 'scheduled'));
+                            if ('cancelled' === $status_lc) {
+                                $remark = __('Cancelled', 'ridefleet-booking'); $remark_class = 'rfb-remark--cancelled';
+                            } elseif ('active' === $status_lc) {
+                                $remark = __('In Flight', 'ridefleet-booking'); $remark_class = 'rfb-remark--active';
+                            } elseif ('landed' === $status_lc) {
+                                $remark = __('Landed', 'ridefleet-booking'); $remark_class = 'rfb-remark--landed';
+                            } elseif ('diverted' === $status_lc || 'redirected' === $status_lc) {
+                                $remark = __('Diverted', 'ridefleet-booking'); $remark_class = 'rfb-remark--diverted';
+                            } elseif ($delay > 5) {
+                                $remark = sprintf(__('Delayed +%dmin', 'ridefleet-booking'), $delay); $remark_class = 'rfb-remark--delayed';
+                            } elseif ($delay < -2) {
+                                $remark = __('Early', 'ridefleet-booking'); $remark_class = 'rfb-remark--early';
+                            } else {
+                                $remark = __('On Time', 'ridefleet-booking'); $remark_class = 'rfb-remark--ontime';
+                            }
+                            // Override remark for past/landed
+                            if ($is_past && !$is_active && 'cancelled' !== $status_lc && 'diverted' !== $status_lc && 'redirected' !== $status_lc) {
+                                $remark = __('Landed', 'ridefleet-booking'); $remark_class = 'rfb-remark--landed';
+                            }
+
+                            $row_class = 'rfb-fids-row';
+                            if ($is_past)      $row_class .= ' rfb-fids-row--past';
+                            if ($is_active)    $row_class .= ' rfb-fids-row--active';
                             if ($is_cancelled) $row_class .= ' rfb-fids-row--cancelled';
                         ?>
                         <tr class="<?php echo esc_attr($row_class); ?>">
-                            <td class="rfb-fids-time">
-                                <strong><?php echo esc_html($sched_disp); ?></strong>
-                                <?php if ($delay > 0): ?>
-                                    <span class="rfb-fids-delay">+<?php echo esc_html((string)$delay); ?>min</span>
-                                <?php endif; ?>
-                                <?php if ($is_past && !$is_active): ?>
-                                    <span class="rfb-fids-past-label"><?php esc_html_e('PAST', 'ridefleet-booking'); ?></span>
-                                <?php endif; ?>
+                            <td class="rfb-fids-airline">
+                                <?php if ($is_active): ?><span class="rfb-fids-live-dot"></span><?php endif; ?>
+                                <?php echo esc_html($airline_name); ?>
                             </td>
-                            <td>
-                                <span class="rfb-airline-badge"><?php echo esc_html($airline_code); ?></span>
-                                <strong style="margin-left:6px;"><?php echo esc_html($fnum); ?></strong>
-                            </td>
-                            <td><?php echo esc_html($airline_name); ?></td>
+                            <td class="rfb-fids-flightnum"><?php echo esc_html($flight_number); ?></td>
                             <td>
                                 <strong><?php echo esc_html($other_iata); ?></strong>
                                 <?php if ($other_info): ?>
                                     <span class="rfb-fids-city"><?php echo esc_html($other_info['city']); ?></span>
                                 <?php endif; ?>
                             </td>
-                            <td><?php echo $terminal ? '<span class="rfb-fids-terminal">' . esc_html('T'.$terminal) . '</span>' : '<span class="rfb-fids-none">—</span>'; ?></td>
+                            <td class="rfb-fids-time"><strong><?php echo esc_html($sched_disp); ?></strong></td>
+                            <td><span class="rfb-fids-actual <?php echo esc_attr($actual_class); ?>"><?php echo esc_html($actual_disp); ?></span></td>
+                            <td><span class="rfb-fids-remark <?php echo esc_attr($remark_class); ?>"><?php echo esc_html($remark); ?></span></td>
                             <td><?php echo $gate ? '<span class="rfb-fids-gate">' . esc_html($gate) . '</span>' : '<span class="rfb-fids-none">—</span>'; ?></td>
-                            <td><span class="rfb-fids-status rfb-fids-status--<?php echo esc_attr($status); ?>"><?php echo esc_html(ucfirst($is_past && !$is_active ? 'landed' : $status)); ?></span>
-                                <?php if ($is_active): ?> <span class="rfb-fids-now">● NOW</span><?php endif; ?>
-                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>

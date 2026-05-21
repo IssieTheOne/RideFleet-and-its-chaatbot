@@ -98,11 +98,19 @@ final class ChatHistoryPage {
 		$total_pages = max(1, (int) ceil($total / self::PAGE_SIZE));
 		?>
 		<div class="wrap rfac-admin">
-			<h1>
-				<?php esc_html_e('Chatbot Conversations', 'ridefleet-ai-chatbot'); ?>
-				<span class="title-count theme-count"><?php echo esc_html(number_format_i18n($total)); ?></span>
-				<a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=rfac_export_chat_sessions'), 'rfac_export_chat_sessions')); ?>" class="page-title-action"><?php esc_html_e('Export CSV', 'ridefleet-ai-chatbot'); ?></a>
-			</h1>
+			<div class="rfac-hero">
+				<div>
+					<p class="rfac-kicker"><?php esc_html_e('RideFleet AI Chatbot', 'ridefleet-ai-chatbot'); ?></p>
+					<h1><?php esc_html_e('Conversations', 'ridefleet-ai-chatbot'); ?>
+						<span class="title-count theme-count" style="background:rgba(255,255,255,.15);color:#fff;"><?php echo esc_html(number_format_i18n($total)); ?></span>
+					</h1>
+					<p><?php esc_html_e('Browse, search, and inspect every chatbot conversation. Filter by state, language, or message content.', 'ridefleet-ai-chatbot'); ?></p>
+				</div>
+				<div class="rfac-hero-actions">
+					<a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=rfac_export_chat_sessions'), 'rfac_export_chat_sessions')); ?>" class="button">⬇ <?php esc_html_e('Export CSV', 'ridefleet-ai-chatbot'); ?></a>
+					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot')); ?>" class="button">⚙ <?php esc_html_e('Settings', 'ridefleet-ai-chatbot'); ?></a>
+				</div>
+			</div>
 
 			<section class="rfac-panel rfac-panel-wide" style="margin-top:18px;">
 				<h2 style="margin-bottom:14px;"><?php esc_html_e('Booking Funnel', 'ridefleet-ai-chatbot'); ?></h2>

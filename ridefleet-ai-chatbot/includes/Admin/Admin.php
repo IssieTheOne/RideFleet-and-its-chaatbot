@@ -318,8 +318,19 @@ final class Admin {
 		$activity = self::recent_activity(5);
 		?>
 		<div class="wrap rfac-admin">
-			<h1><?php esc_html_e('AI Chatbot Connector', 'ridefleet-ai-chatbot'); ?></h1>
 			<?php settings_errors('rfac_settings'); ?>
+
+			<div class="rfac-hero">
+				<div>
+					<p class="rfac-kicker"><?php esc_html_e('RideFleet AI Chatbot', 'ridefleet-ai-chatbot'); ?></p>
+					<h1><?php esc_html_e('Chatbot Settings', 'ridefleet-ai-chatbot'); ?></h1>
+					<p><?php esc_html_e('Configure the AI model, booking API, company context, widget theme, and conversation guardrails.', 'ridefleet-ai-chatbot'); ?></p>
+				</div>
+				<div class="rfac-hero-actions">
+					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-history')); ?>" class="button">💬 <?php esc_html_e('Conversations', 'ridefleet-ai-chatbot'); ?></a>
+					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-changes')); ?>" class="button">✏️ <?php esc_html_e('Change Requests', 'ridefleet-ai-chatbot'); ?></a>
+				</div>
+			</div>
 
 			<div class="rfac-stats">
 				<div class="rfac-stat">
