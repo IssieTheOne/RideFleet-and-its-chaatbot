@@ -79,11 +79,6 @@ final class ConversationEngine {
 			return $this->commit_response($response);
 		}
 
-		if ('price_negotiation_pending' === $session['state'] && $this->is_acknowledgement($message)) {
-			$response = $this->reply($session, __('Yes. Your proposed fare is waiting for dispatch approval. This is not a confirmed booking yet; the taxi team must approve it and contact you first.', 'ridefleet-ai-chatbot'));
-			return $this->commit_response($response);
-		}
-
 		if ($this->asks_request_status($message)) {
 			$response = $this->reply($session, $this->request_status_message($session, $message));
 			return $this->commit_response($response);
@@ -311,44 +306,6 @@ final class ConversationEngine {
 			$session['state'] = 'capture_passengers';
 		} elseif ('confirm_price' === $session['state'] && $this->is_negative($message)) {
 			$session['state'] = 'confirm_price';
-		} elseif ('capture_price_offer' === $session['state']) {
-			$offer = $this->extract_price_offer($message);
-			$offer_check = $this->validate_price_offer($session, $offer);
-			if (!$offer_check['accepted']) {
-				$session['state'] = 'confirm_price';
-				$session['validation_error'] = $offer_check['message'];
-			} else {
-				$data['proposed_price'] = $offer;
-				$session['state'] = 'capture_negotiation_name';
-			}
-		} elseif ('capture_negotiation_name' === $session['state']) {
-			if (!$this->valid_customer_name($message)) {
-				$session['state'] = 'capture_negotiation_name';
-				$session['validation_error'] = __('Please send the customer name so dispatch knows who made the fare request.', 'ridefleet-ai-chatbot');
-			} else {
-				$data['customer_name'] = sanitize_text_field($message);
-				$session['state'] = 'capture_negotiation_phone';
-			}
-		} elseif ('capture_negotiation_phone' === $session['state']) {
-			if (!$this->valid_phone($message)) {
-				$session['state'] = 'capture_negotiation_phone';
-				$session['validation_error'] = __('Please enter a real phone number dispatch can call or text about this fare request.', 'ridefleet-ai-chatbot');
-			} else {
-				$data['customer_phone'] = sanitize_text_field($message);
-				$session['phone_note'] = $this->phone_note($message);
-				$session['state'] = 'capture_negotiation_time';
-			}
-		} elseif ('capture_negotiation_time' === $session['state']) {
-			$pickup_time = $this->normalize_pickup_time($message);
-			if (!$pickup_time) {
-				$session['state'] = 'capture_negotiation_time';
-				$session['validation_error'] = __('Please enter a valid future pickup date and time, for example "tomorrow 09:00" or "2026-05-13 09:00".', 'ridefleet-ai-chatbot');
-			} else {
-				$data['pickup_time'] = $pickup_time;
-				$request_id = $this->sessions->log_price_negotiation_request((int) $session['id'], ['collected_data' => $data, 'last_quote' => $session['last_quote']]);
-				$data['last_change_request_id'] = $request_id;
-				$session['state'] = 'price_negotiation_pending';
-			}
 		} elseif ('capture_passengers' === $session['state']) {
 			$count = $this->extract_count($message);
 			if ($count < 1 || $count > 16) {
@@ -483,20 +440,6 @@ final class ConversationEngine {
 			case 'quote_refresh_requested':
 				return $this->quote_trip($session, true);
 
-			case 'capture_price_offer':
-				return $this->reply($session, __('What fare would you like to propose? I can send a reasonable offer to dispatch for human approval, but I cannot change the verified fare myself.', 'ridefleet-ai-chatbot'));
-
-			case 'capture_negotiation_name':
-				return $this->reply($session, __('I can send that reasonable fare request to dispatch. What name should dispatch use for this request?', 'ridefleet-ai-chatbot'));
-
-			case 'capture_negotiation_phone':
-				return $this->reply($session, __('What phone number should dispatch use if they approve or reject the proposed fare?', 'ridefleet-ai-chatbot'));
-
-			case 'capture_negotiation_time':
-				$note = (string) ($session['phone_note'] ?? '');
-				unset($session['phone_note']);
-				return $this->reply($session, trim($note . ' ' . __('What pickup date and time should dispatch review for this proposed fare?', 'ridefleet-ai-chatbot')));
-
 			case 'capture_name':
 				return $this->reply($session, $this->say($session, 'ask_name'));
 
@@ -514,8 +457,6 @@ final class ConversationEngine {
 			case 'change_pending':
 				return $this->reply($session, __('I sent your change request to dispatch for admin approval. Your original booking is still active until dispatch confirms the change. If the route or time changes, the final price may also change and the taxi team will contact you.', 'ridefleet-ai-chatbot'));
 
-			case 'price_negotiation_pending':
-				return $this->reply($session, $this->price_negotiation_pending_message($session));
 		}
 
 		$session['state'] = 'capture_pickup';
@@ -713,10 +654,6 @@ final class ConversationEngine {
 			$intent = 'edit_request';
 			$fields['booking_id'] = $this->external_booking_edit_request($message) ?: null;
 			$confidence = 0.86;
-		} elseif ($this->asks_price_negotiation($message)) {
-			$intent = 'price_negotiation';
-			$fields['proposed_price'] = $this->extract_price_offer($message) ?: null;
-			$confidence = 0.9;
 		} elseif ($this->normalize_pickup_time($message)) {
 			$intent = 'time';
 			$fields['pickup_time'] = $message;
@@ -782,7 +719,7 @@ final class ConversationEngine {
 	}
 
 	private function normalize_turn(array $turn): array {
-		$allowed = ['smalltalk', 'location', 'confirmation', 'question', 'edit_request', 'cancel', 'price_negotiation', 'time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'unknown'];
+		$allowed = ['smalltalk', 'location', 'confirmation', 'question', 'edit_request', 'cancel', 'time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'unknown'];
 		$intent = sanitize_key((string) ($turn['intent'] ?? 'unknown'));
 		if (!in_array($intent, $allowed, true)) {
 			$intent = 'unknown';
@@ -814,14 +751,14 @@ final class ConversationEngine {
 		$allowed = match ($state) {
 			'capture_pickup', 'confirm_pickup_city', 'greeting' => ['pickup', 'dropoff', 'language_target', 'booking_id', 'question_type'],
 			'capture_dropoff', 'confirm_dropoff_city' => ['dropoff', 'language_target', 'booking_id', 'question_type'],
-			'confirm_price', 'capture_price_offer' => ['proposed_price', 'language_target', 'booking_id', 'question_type'],
+			'confirm_price' => ['proposed_price', 'language_target', 'booking_id', 'question_type'],
 			'capture_passengers' => ['passenger_count', 'language_target', 'question_type'],
 			'capture_luggage' => ['luggage_count', 'language_target', 'question_type'],
 			'capture_vehicle' => ['vehicle_choice', 'language_target', 'question_type'],
 			'capture_extras' => ['extras', 'language_target', 'question_type'],
-			'capture_name', 'capture_negotiation_name' => ['name', 'language_target', 'question_type'],
-			'capture_phone', 'capture_negotiation_phone' => ['phone', 'language_target', 'question_type'],
-			'capture_pickup_time', 'capture_negotiation_time' => ['pickup_time', 'language_target', 'question_type'],
+			'capture_name' => ['name', 'language_target', 'question_type'],
+			'capture_phone' => ['phone', 'language_target', 'question_type'],
+			'capture_pickup_time' => ['pickup_time', 'language_target', 'question_type'],
 			default => ['pickup', 'dropoff', 'proposed_price', 'pickup_time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'language_target', 'booking_id', 'question_type'],
 		};
 		$turn['fields'] = array_intersect_key($fields, array_flip($allowed));
@@ -901,23 +838,10 @@ final class ConversationEngine {
 			return $this->reply_with_next_step($session, __('I help customers get a verified taxi fare and create a booking with dispatch. I can answer basic company and ride questions, but I cannot change prices or manage RideFleet settings.', 'ridefleet-ai-chatbot'));
 		}
 
-		if ('confirm_price' === $session['state'] && $this->asks_price_negotiation($message)) {
-			$offer = $this->extract_price_offer($message);
-			if ($offer <= 0) {
-				$session['state'] = 'capture_price_offer';
-				return $this->reply($session, __('I can send a reasonable counteroffer to dispatch for human approval. What fare would you like to propose?', 'ridefleet-ai-chatbot'));
-			}
-
-			$offer_check = $this->validate_price_offer($session, $offer);
-			if (!$offer_check['accepted']) {
-				return $this->reply($session, $offer_check['message']);
-			}
-
-			$data = $session['collected_data'];
-			$data['proposed_price'] = $offer;
-			$session['collected_data'] = $data;
-			$session['state'] = 'capture_negotiation_name';
-			return $this->reply($session, $this->price_offer_intro_message($session));
+		if ('confirm_price' === $session['state'] && $this->mentions_price_or_discount($message)) {
+			$quote = $session['last_quote'];
+			$price = isset($quote['final_price']) ? sprintf('%s %.2f', (string) ($quote['currency'] ?? 'USD'), (float) $quote['final_price']) : __('the verified fare', 'ridefleet-ai-chatbot');
+			return $this->reply($session, sprintf(__('The fare is set at %s by dispatch and cannot be changed here. Reply yes to book at this price, or say change route to check a different trip.', 'ridefleet-ai-chatbot'), $price));
 		}
 
 		if ('confirm_price' === $session['state'] && $this->is_confused($message)) {
@@ -928,6 +852,30 @@ final class ConversationEngine {
 
 		if ('confirm_price' === $session['state'] && $this->is_negative($message)) {
 			return $this->reply($session, __('No worries. I will keep this quote here. Say yes to book it, change route to price a different trip, or cancel to end this booking.', 'ridefleet-ai-chatbot'));
+		}
+
+		if ('vehicle_unavailable' === $session['state']) {
+			if (preg_match('/\b(contact|reach|call|email|phone|who|person|dispatch|human|someone|speak|number|address|details)\b/i', $message)) {
+				$phone = trim((string) \RideFleetAIChatbot\Support\Options::get('dispatch_contact_number', ''));
+				$email = trim((string) \RideFleetAIChatbot\Support\Options::get('notification_email', get_option('admin_email', '')));
+				$parts = [];
+				if ($phone) {
+					$parts[] = sprintf(__('Phone: %s', 'ridefleet-ai-chatbot'), $phone);
+				}
+
+				if ($email) {
+					$parts[] = sprintf(__('Email: %s', 'ridefleet-ai-chatbot'), $email);
+				}
+
+				$contact_text = $parts ? implode(' · ', $parts) : __('Please contact the company directly via the website.', 'ridefleet-ai-chatbot');
+				return $this->reply($session, sprintf(__('Here is how to reach dispatch: %s. They can arrange a vehicle suited for your group size.', 'ridefleet-ai-chatbot'), $contact_text));
+			}
+
+			if ($this->is_gratitude_or_goodbye($message) || $this->is_acknowledgement($message) || $this->asks_to_close_chat($message)) {
+				return $this->reply($session, __('No problem. Feel free to reach out to dispatch directly, or reopen this chat any time.', 'ridefleet-ai-chatbot'));
+			}
+
+			return $this->reply($session, $this->vehicle_unavailable_message($session));
 		}
 
 		if ($this->is_smalltalk($message)) {
@@ -981,22 +929,6 @@ final class ConversationEngine {
 
 		if ('capture_pickup_time' === $session['state']) {
 			return $this->say($session, 'ask_time');
-		}
-
-		if ('capture_price_offer' === $session['state']) {
-			return __('What fare would you like to propose?', 'ridefleet-ai-chatbot');
-		}
-
-		if ('capture_negotiation_name' === $session['state']) {
-			return __('What name should dispatch use for the fare request?', 'ridefleet-ai-chatbot');
-		}
-
-		if ('capture_negotiation_phone' === $session['state']) {
-			return __('What phone number should dispatch use for the fare request?', 'ridefleet-ai-chatbot');
-		}
-
-		if ('capture_negotiation_time' === $session['state']) {
-			return __('What pickup date and time should dispatch review?', 'ridefleet-ai-chatbot');
 		}
 
 		return $this->say($session, 'ask_pickup');
@@ -1071,7 +1003,7 @@ final class ConversationEngine {
 	}
 
 	private function is_affirmative(string $message): bool {
-		return 1 === preg_match('/^\s*(yes|yeah|yep|yup|confirm|book|reserve|ok|okay|sure|lets do|let\'s do|do it|that one|proceed|go ahead|oui|ja|zeker|daccord|d\'accord)(?:\s+(?:yes|yeah|yep|yup|ok|okay|sure|oui|ja|zeker|daccord|d\'accord))*\s*[\.\?!]*\s*$/i', $message);
+		return 1 === preg_match('/^\s*(yes|yeah|yep|yup|confirm|book|reserve|ok|okay|sure|lets do|let\'s do|do it|that one|proceed|go ahead|oui|ja|zeker|daccord|d\'accord)(?:[,\s]+(?:yes|yeah|yep|yup|ok|okay|sure|oui|ja|zeker|daccord|d\'accord|confirm|please|go|proceed|book|reserve))*\s*[\.\?!]*\s*$/i', $message);
 	}
 
 	private function extract_count(string $message): int {
@@ -1313,6 +1245,10 @@ final class ConversationEngine {
 	}
 
 	private function asks_language_support(string $message): bool {
+		if (1 === preg_match('/\b(what|which)\s+language\b/i', $message)) {
+			return true;
+		}
+
 		return 1 === preg_match('/\b(spreek|praat|begrijp|kan jij|kun jij|parlez|speak|understand)\b.*\b(nederlands|dutch|frans|french|english|engels)\b/i', $message);
 	}
 
@@ -1453,91 +1389,12 @@ final class ConversationEngine {
 		return '';
 	}
 
-	private function asks_price_negotiation(string $message): bool {
-		return $this->extract_price_offer($message) > 0
-			|| 1 === preg_match('/\b(less|cheaper|discount|lower|too much|expensive|negotiate|deal|counteroffer|bucks?|dollars?|wish\s+to\s+go|do\s+\$?\d+|take\s+\$?\d+|with\s+\$?\d+|for\s+\$?\d+|\$?\d+\s*(?:bucks?|dollars?)?)\b/i', $message);
-	}
-
-	private function extract_price_offer(string $message): float {
-		if (preg_match('/(?:\$|€|eur|usd)?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:\$|€|eur|usd|bucks?|dollars?)?/i', $message, $matches)) {
-			return round((float) str_replace(',', '.', (string) $matches[1]), 2);
-		}
-
-		return 0.0;
-	}
-
-	private function validate_price_offer(array $session, float $offer): array {
-		$quote = $session['last_quote'];
-		$original = round((float) ($quote['final_price'] ?? 0), 2);
-		$currency = (string) ($quote['currency'] ?? 'USD');
-		if ($original <= 0 || $offer <= 0) {
-			return [
-				'accepted' => false,
-				'message' => __('I need a clear proposed fare amount before I can send it to dispatch.', 'ridefleet-ai-chatbot'),
-			];
-		}
-
-		if ($offer >= $original) {
-			return [
-				'accepted' => false,
-				'message' => sprintf(__('The verified fare is already %1$s %2$.2f. If you are happy with that fare, reply yes and I will continue the normal booking.', 'ridefleet-ai-chatbot'), $currency, $original),
-			];
-		}
-
-		$discount = (($original - $offer) / $original) * 100;
-		$max_discount = min(40.0, max(1.0, (float) \RideFleetAIChatbot\Support\Options::get('max_price_negotiation_discount', 20)));
-		if ($discount > $max_discount) {
-			return [
-				'accepted' => false,
-				'message' => sprintf(__('That offer is too far below the verified fare for me to send automatically. Verified fare: %1$s %2$.2f. Proposed fare: %1$s %3$.2f. Please propose something within %4$.1f%%, or reply yes to book at the verified fare.', 'ridefleet-ai-chatbot'), $currency, $original, $offer, $max_discount),
-			];
-		}
-
-		if (($original - $offer) < 1) {
-			return [
-				'accepted' => false,
-				'message' => sprintf(__('That difference is very small. The verified fare is %1$s %2$.2f. Reply yes to continue, or propose a clearer amount for dispatch to review.', 'ridefleet-ai-chatbot'), $currency, $original),
-			];
-		}
-
-		return [
-			'accepted' => true,
-			'message' => '',
-		];
-	}
-
-	private function price_offer_intro_message(array $session): string {
-		$quote = $session['last_quote'];
-		$data = $session['collected_data'];
-		$original = (float) ($quote['final_price'] ?? 0);
-		$offer = (float) ($data['proposed_price'] ?? 0);
-		$currency = (string) ($quote['currency'] ?? 'USD');
-		$discount = $original > 0 ? (($original - $offer) / $original) * 100 : 0;
-
-		return sprintf(
-			__('That is a reasonable counteroffer, so I can send it to dispatch for human approval. Original fare: %1$s %2$.2f. Proposed fare: %1$s %3$.2f (%4$.1f%% lower). This is not confirmed yet. What name should dispatch use for this request?', 'ridefleet-ai-chatbot'),
-			$currency,
-			$original,
-			$offer,
-			$discount
-		);
-	}
-
-	private function price_negotiation_pending_message(array $session): string {
-		$quote = $session['last_quote'];
-		$data = $session['collected_data'];
-		$currency = (string) ($quote['currency'] ?? 'USD');
-
-		return sprintf(
-			__('I sent your fare request to dispatch for human approval. Original fare: %1$s %2$.2f. Proposed fare: %1$s %3$.2f. This ride is not confirmed yet; the taxi team will contact you after review.', 'ridefleet-ai-chatbot'),
-			$currency,
-			(float) ($quote['final_price'] ?? 0),
-			(float) ($data['proposed_price'] ?? 0)
-		);
-	}
-
 	private function is_confused(string $message): bool {
 		return 1 === preg_match('/^\s*(\?|what+|huh|why|really|seriously|wait|what do you mean)\s*\??\s*$/i', $message);
+	}
+
+	private function mentions_price_or_discount(string $message): bool {
+		return 1 === preg_match('/\b(less|cheaper|discount|lower|too much|expensive|negotiate|deal|counteroffer|bucks?|dollars?|propose|lower fare|fare|price|cost|\$\d|\d+\s*(?:bucks?|dollars?|eur|euro))\b/i', $message);
 	}
 
 	private function valid_phone(string $message): bool {
@@ -1689,12 +1546,13 @@ final class ConversationEngine {
 	private function extract_location_candidate(string $text): string {
 		$text = trim($text);
 		$patterns = [
-			'/\b(?:pick(?:\s*me)?\s*up|pickup|collect\s+me)\s+(?:at|from|in)\s+(.+)$/i',
-			'/\b(?:picked\s+up|be\s+picked\s+up|be\s+picked)\s+(?:at|from|in)\s+(.+)$/i',
-			'/\b(?:want\s+to\s+be\s+picked|want\s+to\s+be\s+picked\s+up)\s+(?:at|from|in)\s+(.+)$/i',
-			'/\b(?:you\s+can\s+pick\s+me\s+up|can\s+pick\s+me\s+up)\s+(?:at|from|in)\s+(.+)$/i',
+			'/\bwould\s+(?:love|like)\s+to\s+be\s+picked\s+(?:up\s+)?(?:at|from|in|on)\s+(.+)$/i',
+			'/\b(?:pick(?:\s*me)?\s*up|pickup|collect\s+me)\s+(?:at|from|in|on)\s+(.+)$/i',
+			'/\b(?:picked\s+up|be\s+picked\s+up|be\s+picked)\s+(?:at|from|in|on)\s+(.+)$/i',
+			'/\b(?:want\s+to\s+be\s+picked|want\s+to\s+be\s+picked\s+up)\s+(?:at|from|in|on)\s+(.+)$/i',
+			'/\b(?:you\s+can\s+pick\s+me\s+up|can\s+pick\s+me\s+up)\s+(?:at|from|in|on)\s+(.+)$/i',
 			'/\b(?:i\s+am|i\'m|im)\s+(?:at|in)\s+(.+)$/i',
-			'/\b(?:drop\s*(?:me)?\s*off|destination\s+is|going\s+to|to)\s+(?:at|in)?\s*(.+)$/i',
+			'/\b(?:drop\s*(?:me)?\s*off|destination\s+is|going\s+to|take\s+me\s+to|drive\s+me\s+to)\s+(?:at|in)?\s*(.+)$/i',
 		];
 
 		foreach ($patterns as $pattern) {
@@ -1804,7 +1662,7 @@ final class ConversationEngine {
 	}
 
 	private function looks_like_name_for_state(string $message, string $state): bool {
-		if (!in_array($state, ['capture_name', 'capture_negotiation_name'], true)) {
+		if ('capture_name' !== $state) {
 			return false;
 		}
 
@@ -1972,8 +1830,6 @@ final class ConversationEngine {
 			'booking' => [
 				'id' => $session['collected_data']['last_booking_id'] ?? null,
 				'changeRequestId' => $session['collected_data']['last_change_request_id'] ?? null,
-				'requestType' => 'price_negotiation_pending' === ($session['state'] ?? '') ? 'price_negotiation' : null,
-				'proposedPrice' => $session['collected_data']['proposed_price'] ?? null,
 			],
 			'ui_action' => $session['ui_action'] ?? null,
 		];

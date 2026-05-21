@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
 	'use strict';
 
 	function getStoredSessionId() {
@@ -65,7 +65,7 @@
 		var collected = data.collected || {};
 		var quote = data.quote || {};
 		var booking = data.booking || {};
-		var shouldRender = ['confirm_price', 'complete', 'change_pending', 'price_negotiation_pending'].indexOf(payload.state) !== -1;
+		var shouldRender = ['confirm_price', 'complete', 'change_pending'].indexOf(payload.state) !== -1;
 		if (!shouldRender) {
 			return;
 		}
@@ -74,7 +74,6 @@
 		card.className = 'rfac-info-card';
 		var titles = {
 			complete: 'Booking confirmed',
-			price_negotiation_pending: 'Fare approval pending',
 			change_pending: 'Change request pending'
 		};
 		var title = titles[payload.state] || 'Trip quote';
@@ -336,8 +335,8 @@
 
 		function setState(state) {
 			currentState = state || currentState;
-			var phoneMode = currentState === 'capture_phone' || currentState === 'capture_negotiation_phone';
-			var timeMode = currentState === 'capture_pickup_time' || currentState === 'capture_negotiation_time';
+			var phoneMode = currentState === 'capture_phone';
+			var timeMode = currentState === 'capture_pickup_time';
 			phonePrefix.hidden = !phoneMode;
 
 			if (phoneMode) {
@@ -367,9 +366,8 @@
 				capture_vehicle: 1, capture_extras: 1,
 				quote_refresh_requested: 1,
 				capture_name: 2, capture_phone: 2,
-				capture_pickup_time: 2, capture_negotiation_name: 2,
-				capture_negotiation_phone: 2, capture_negotiation_time: 2,
-				complete: 3, change_pending: 3, price_negotiation_pending: 3
+				capture_pickup_time: 2,
+				complete: 3, change_pending: 3
 			};
 			var step = stepMap[currentState] !== undefined ? stepMap[currentState] : 3;
 			progress.forEach(function (item, index) {
@@ -383,7 +381,6 @@
 			if (state === 'confirm_price') {
 				replies = [
 					{ label: 'Confirm booking', value: 'yes, confirm', primary: true },
-					{ label: 'Negotiate price', value: 'I would like to propose a lower fare' },
 					{ label: 'Change details', value: 'I want to change something' }
 				];
 			} else if (state === 'capture_passengers') {
@@ -488,7 +485,7 @@
 			}
 			clearQuickReplies();
 
-			if ((currentState === 'capture_phone' || currentState === 'capture_negotiation_phone') && phonePrefix && !/^\+/.test(text)) {
+			if (currentState === 'capture_phone' && phonePrefix && !/^\+/.test(text)) {
 				text = phonePrefix.value + ' ' + text.replace(/^0+/, '');
 			}
 
