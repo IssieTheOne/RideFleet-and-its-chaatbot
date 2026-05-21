@@ -23,6 +23,30 @@ final class ChatHistoryPage {
 		$sessions_table = $wpdb->prefix . 'rfac_chat_sessions';
 		$messages_table = $wpdb->prefix . 'rfac_chat_messages';
 
+		// ── Booking funnel analytics ──────────────────────────────────────────────
+		$funnel_states = ['greeting','capture_pickup','capture_dropoff','confirm_price','capture_name','booking_requested','complete'];
+		$funnel_labels = [
+			'greeting'         => 'Chat opened',
+			'capture_pickup'   => 'Gave pickup',
+			'capture_dropoff'  => 'Gave drop-off',
+			'confirm_price'    => 'Saw quote',
+			'capture_name'     => 'Gave name',
+			'booking_requested'=> 'Submitted',
+			'complete'         => 'Completed',
+		];
+		$post_funnel = ['capture_passengers','capture_luggage','capture_vehicle','vehicle_unavailable','capture_extras','quote_refresh_requested','capture_phone','capture_pickup_time','booking_requested','complete','change_pending','capture_via_stop','capture_change_request','confirm_long_trip'];
+		$funnel_counts = [];
+		foreach ($funnel_states as $fidx => $fs) {
+			if ('complete' === $fs) {
+				$funnel_counts[$fs] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$sessions_table} WHERE state IN ('complete','change_pending')");
+			} else {
+				$reached = array_unique(array_merge(array_slice($funnel_states, $fidx), $post_funnel));
+				$ph = implode(',', array_fill(0, count($reached), '%s'));
+				$funnel_counts[$fs] = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$sessions_table} WHERE state IN ({$ph})", ...$reached));
+			}
+		}
+		$funnel_max = max(1, $funnel_counts['greeting'] ?? 1);
+
 		$session_id = absint($_GET['session_id'] ?? 0);
 		$search = sanitize_text_field((string) ($_GET['s'] ?? ''));
 		$state_filter = sanitize_key((string) ($_GET['state_filter'] ?? ''));
@@ -79,6 +103,25 @@ final class ChatHistoryPage {
 				<span class="title-count theme-count"><?php echo esc_html(number_format_i18n($total)); ?></span>
 				<a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=rfac_export_chat_sessions'), 'rfac_export_chat_sessions')); ?>" class="page-title-action"><?php esc_html_e('Export CSV', 'ridefleet-ai-chatbot'); ?></a>
 			</h1>
+
+			<section class="rfac-panel rfac-panel-wide" style="margin-top:18px;">
+				<h2 style="margin-bottom:14px;"><?php esc_html_e('Booking Funnel', 'ridefleet-ai-chatbot'); ?></h2>
+				<div class="rfac-funnel-bars">
+					<?php foreach ($funnel_states as $fs):
+						$count = $funnel_counts[$fs] ?? 0;
+						$pct   = $funnel_max > 0 ? round($count / $funnel_max * 100) : 0;
+						$label = $funnel_labels[$fs] ?? str_replace('_',' ',$fs);
+					?>
+					<div class="rfac-funnel-bar">
+						<span class="rfac-funnel-bar__label"><?php echo esc_html($label); ?></span>
+						<div class="rfac-funnel-bar__track">
+							<div class="rfac-funnel-bar__fill" style="width:<?php echo esc_attr((string)$pct); ?>%;"></div>
+						</div>
+						<span class="rfac-funnel-bar__count"><?php echo esc_html(number_format_i18n($count)); ?> <small style="color:#94a3b8;">(<?php echo esc_html((string)$pct); ?>%)</small></span>
+					</div>
+					<?php endforeach; ?>
+				</div>
+			</section>
 
 			<?php if (!empty($_GET['deleted'])) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e('Conversation deleted.', 'ridefleet-ai-chatbot'); ?></p></div>

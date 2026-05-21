@@ -87,6 +87,30 @@
 			modelPicker.addEventListener('change', syncModelPicker);
 		}
 
+		function bindModelPicker(pickerId, valueId) {
+			var picker = document.getElementById(pickerId);
+			var value  = document.getElementById(valueId);
+			if (!picker || !value) return;
+			function sync() {
+				if (picker.value === '__custom__') {
+					value.style.display = '';
+					value.readOnly = false;
+					if (picker.querySelector('option[value="' + value.value + '"]:not([value="__custom__"])')) {
+						value.value = '';
+					}
+					value.focus();
+				} else {
+					value.value = picker.value;
+					value.style.display = 'none';
+					value.readOnly = true;
+				}
+			}
+			if (picker.value !== '__custom__') { value.style.display='none'; value.readOnly=true; } else { value.style.display=''; value.readOnly=false; }
+			picker.addEventListener('change', sync);
+		}
+		bindModelPicker('rfac-fast-picker',    'rfac-fast-value');
+		bindModelPicker('rfac-quality-picker', 'rfac-quality-value');
+
 		/* Company bio AI rewrite */
 		var bio = document.getElementById('rfac-company-bio');
 		var rewriteStatus = document.getElementById('rfac-rewrite-status');

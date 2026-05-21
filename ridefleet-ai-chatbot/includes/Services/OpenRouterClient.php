@@ -66,7 +66,7 @@ final class OpenRouterClient {
 				],
 				'body' => wp_json_encode(
 					[
-						'model' => sanitize_text_field((string) Options::get('selected_model', 'openai/gpt-4o-mini')),
+						'model' => $this->model_for('fast'),
 						'messages' => [
 							['role' => 'system', 'content' => $system],
 							['role' => 'user', 'content' => (string) $user],
@@ -138,7 +138,7 @@ final class OpenRouterClient {
 				],
 				'body' => wp_json_encode(
 					[
-						'model' => sanitize_text_field((string) Options::get('selected_model', 'openai/gpt-4o-mini')),
+						'model' => $this->model_for('fast'),
 						'messages' => [
 							['role' => 'system', 'content' => $system],
 							['role' => 'user', 'content' => $context . "\n\nCustomer message: " . $message],
@@ -222,7 +222,7 @@ final class OpenRouterClient {
 				],
 				'body' => wp_json_encode(
 					[
-						'model' => sanitize_text_field((string) Options::get('selected_model', 'openai/gpt-4o-mini')),
+						'model' => $this->model_for('quality'),
 						'messages' => [
 							['role' => 'system', 'content' => $system],
 							[
@@ -283,7 +283,7 @@ final class OpenRouterClient {
 				],
 				'body' => wp_json_encode(
 					[
-						'model' => sanitize_text_field((string) Options::get('selected_model', 'openai/gpt-4o-mini')),
+						'model' => $this->model_for('quality'),
 						'messages' => [
 							['role' => 'system', 'content' => $instruction],
 							['role' => 'user', 'content' => $text],
@@ -307,6 +307,25 @@ final class OpenRouterClient {
 		}
 
 		return ['success' => true, 'rewritten' => $rewritten];
+	}
+
+	private function model_for(string $task): string {
+		$unified = trim(sanitize_text_field((string) Options::get('selected_model', '')));
+		if ('' !== $unified) {
+			return $unified; // unified model overrides everything
+		}
+		if ('fast' === $task) {
+			$m = trim(sanitize_text_field((string) Options::get('fast_model', '')));
+			if ('' !== $m) {
+				return $m;
+			}
+		} elseif ('quality' === $task) {
+			$m = trim(sanitize_text_field((string) Options::get('quality_model', '')));
+			if ('' !== $m) {
+				return $m;
+			}
+		}
+		return 'openai/gpt-4o-mini';
 	}
 
 	public function valid_key(string $key): bool {

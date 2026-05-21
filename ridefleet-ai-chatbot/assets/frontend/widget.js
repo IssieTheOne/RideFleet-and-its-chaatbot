@@ -221,6 +221,85 @@
 		container.scrollTop = container.scrollHeight;
 	}
 
+	var rfacCurrentState = 'greeting';
+
+	function rfacMessagesEl() {
+		return document.querySelector('[data-rfac-messages]') || document.getElementById('rfac-messages');
+	}
+
+	function rfacScrollToBottom() {
+		var m = rfacMessagesEl();
+		if (m) { m.scrollTop = m.scrollHeight; }
+	}
+
+	function showTypingIndicator() {
+		hideTypingIndicator();
+		var msgs = rfacMessagesEl();
+		if (!msgs) return;
+		var d = document.createElement('div');
+		d.className = 'rfac-bubble rfac-bubble--assistant rfac-typing-indicator';
+		d.id = 'rfac-typing';
+		d.innerHTML = '<span></span><span></span><span></span>';
+		msgs.appendChild(d);
+		rfacScrollToBottom();
+	}
+	function hideTypingIndicator() {
+		var el = document.getElementById('rfac-typing');
+		if (el) el.remove();
+	}
+
+	function scheduleIdleNudge(state) {
+		clearTimeout(window._rfacIdleTimer);
+		var earlyStates = ['greeting','capture_pickup','capture_dropoff','confirm_pickup_city','confirm_dropoff_city'];
+		if (earlyStates.indexOf(state) === -1) return;
+		window._rfacIdleTimer = setTimeout(function() {
+			if (earlyStates.indexOf(rfacCurrentState) === -1) return;
+			var nudges = [
+				'Still looking for a taxi? Just drop your pickup address and I\'ll get you a price in seconds. 🚕',
+				'Need a ride? Send me your pickup location and I\'ll find you a fare straight away.',
+				'I\'m here whenever you\'re ready — just share where you\'d like to be picked up.'
+			];
+			var msgs = rfacMessagesEl();
+			if (!msgs) return;
+			var item = document.createElement('div');
+			item.className = 'rfac-message rfac-message-bot';
+			item.textContent = nudges[Math.floor(Math.random() * nudges.length)];
+			msgs.appendChild(item);
+			rfacScrollToBottom();
+		}, 180000);
+	}
+
+	function maybeShowCalendarLink(data) {
+		if (!data) return;
+		var pickup = (data.booking && data.booking.pickup_address) || (data.collected && data.collected.pickup_address) || data.pickup_address || '';
+		var dropoff = (data.booking && data.booking.dropoff_address) || (data.collected && data.collected.dropoff_address) || data.dropoff_address || '';
+		var pickupTime = (data.booking && data.booking.pickup_time) || (data.collected && data.collected.pickup_time) || data.pickup_time || '';
+		var bookingId = (data.booking && (data.booking.booking_id || data.booking.id)) || data.booking_id || '';
+		if (!pickup || !pickupTime) return;
+		var dt;
+		try { dt = new Date(String(pickupTime).replace(' ', 'T')); if (isNaN(dt.getTime())) return; } catch(e) { return; }
+		var end = new Date(dt.getTime() + 3600000);
+		function fmt(d) { return d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; }
+		var title = encodeURIComponent('Taxi: ' + pickup + (dropoff ? ' → ' + dropoff : ''));
+		var dates = encodeURIComponent(fmt(dt) + '/' + fmt(end));
+		var details = encodeURIComponent('RideFleet booking' + (bookingId ? ' #' + bookingId : '') + '.');
+		var loc = encodeURIComponent(pickup);
+		var url = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + title + '&dates=' + dates + '&details=' + details + '&location=' + loc;
+		var msgs = rfacMessagesEl();
+		if (!msgs) return;
+		var ex = document.getElementById('rfac-calendar-link');
+		if (ex) ex.remove();
+		var a = document.createElement('a');
+		a.id = 'rfac-calendar-link';
+		a.href = url;
+		a.target = '_blank';
+		a.rel = 'noopener noreferrer';
+		a.className = 'rfac-calendar-link';
+		a.textContent = '📅 Add to Google Calendar';
+		msgs.appendChild(a);
+		rfacScrollToBottom();
+	}
+
 	function debounce(fn, ms) {
 		var timer;
 		return function () {
@@ -449,6 +528,11 @@
 						return { label: d.length > 25 ? d.substring(0, 23) + '…' : d, value: d };
 					});
 				}
+			} else if (state === 'capture_via_stop') {
+				replies = [
+					{ label: 'No stops — go direct', value: 'no', primary: true },
+					{ label: 'Yes, I have a stop', value: 'yes' }
+				];
 			} else if (state === 'confirm_price') {
 				replies = [
 					{ label: 'Confirm booking', value: 'yes, confirm', primary: true },
@@ -544,6 +628,7 @@
 			if (!text) {
 				return;
 			}
+			clearTimeout(window._rfacIdleTimer);
 
 			var activeCard = messages.querySelector('[data-rfac-place-card-active="1"]');
 			if (activeCard) {
@@ -584,6 +669,7 @@
 				}
 			}, 30000);
 
+			showTypingIndicator();
 			fetch(endpoint, {
 				method: 'POST',
 				signal: controller ? controller.signal : undefined,
@@ -606,8 +692,14 @@
 					});
 				})
 				.then(function (payload) {
+					hideTypingIndicator();
 					if (payload.session_id) {
 						setStoredSessionId(payload.session_id);
+					}
+					rfacCurrentState = payload.state || 'greeting';
+					scheduleIdleNudge(rfacCurrentState);
+					if (payload.state === 'complete') {
+						maybeShowCalendarLink(payload.data);
 					}
 					appendMessage(messages, payload.message || 'I can help you book a taxi ride.', 'bot');
 					// Show route summary once both locations are known
@@ -642,6 +734,7 @@
 					}
 				})
 				.catch(function (error) {
+					hideTypingIndicator();
 					var msg = error.name === 'AbortError'
 						? 'That took too long. Please try again or choose a more specific place from the suggestions.'
 						: (error.message || 'The chat service is unavailable right now. Please try again in a moment.');

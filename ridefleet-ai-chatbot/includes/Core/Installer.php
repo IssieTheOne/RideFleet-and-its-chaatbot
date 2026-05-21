@@ -212,6 +212,12 @@ final class Installer {
 			'faq_items' => [],
 			'dispatch_response_minutes' => 15,
 			'popular_destinations' => [],
+			'service_area_lat' => '',
+			'service_area_lng' => '',
+			'service_area_radius_km' => 100,
+			'fast_model' => '',
+			'quality_model' => '',
+			'airlabs_api_key' => '',
 			'chatbot_ui_theme' => [
 				'primary' => '#0f766e',
 				'primary_dark' => '#0b5f59',

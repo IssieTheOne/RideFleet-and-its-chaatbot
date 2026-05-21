@@ -102,6 +102,15 @@ final class Admin {
 			'ridefleet-ai-chatbot-privacy',
 			[PrivacyPage::class, 'render']
 		);
+
+		add_submenu_page(
+			'ridefleet-ai-chatbot',
+			__('Flight Tracker', 'ridefleet-ai-chatbot'),
+			__('✈ Flights', 'ridefleet-ai-chatbot'),
+			'manage_options',
+			'ridefleet-ai-chatbot-flights',
+			[FlightTrackerPage::class, 'render']
+		);
 	}
 
 	private static function pending_change_count(): int {
@@ -225,6 +234,12 @@ final class Admin {
 				'faq_items' => $faq_items,
 				'popular_destinations' => $sanitized_popular_destinations,
 				'dispatch_response_minutes' => $sanitized_dispatch_minutes,
+				'service_area_lat'      => sanitize_text_field(wp_unslash($_POST['service_area_lat'] ?? '')),
+				'service_area_lng'      => sanitize_text_field(wp_unslash($_POST['service_area_lng'] ?? '')),
+				'service_area_radius_km'=> max(1, absint($_POST['service_area_radius_km'] ?? 100)),
+				'fast_model'    => sanitize_text_field(wp_unslash($_POST['fast_model'] ?? '')),
+				'quality_model' => sanitize_text_field(wp_unslash($_POST['quality_model'] ?? '')),
+				'airlabs_api_key' => sanitize_text_field(wp_unslash($_POST['airlabs_api_key'] ?? '')),
 			]
 		);
 
@@ -427,6 +442,39 @@ final class Admin {
 						<input type="text" name="selected_model" id="rfac-model-value" value="<?php echo esc_attr($current_model); ?>" placeholder="provider/model-slug" style="margin-top:8px;">
 						<small><?php esc_html_e('Pick a popular OpenRouter model or paste any model slug.', 'ridefleet-ai-chatbot'); ?></small>
 					</label>
+					<div style="margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0;">
+						<p style="margin:0 0 10px;font-size:12px;color:#64748b;"><strong>Per-task overrides</strong> — only used when the Unified model above is empty:</p>
+						<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+							<label style="margin:0">
+								<span>Fast model <small style="font-weight:400;opacity:.7;">(classify &amp; extract)</small></span>
+								<?php
+								$fast_m = (string)($options['fast_model']??'');
+								$fast_custom = ''!==$fast_m && !in_array($fast_m, self::POPULAR_MODELS, true);
+								?>
+								<select id="rfac-fast-picker">
+									<option value="">— same as unified —</option>
+									<?php foreach(self::POPULAR_MODELS as $pm): ?><option value="<?php echo esc_attr($pm);?>" <?php selected($fast_m,$pm);?>><?php echo esc_html($pm);?></option><?php endforeach;?>
+									<option value="__custom__" <?php selected($fast_custom,true);?>>Custom…</option>
+								</select>
+								<input type="text" name="fast_model" id="rfac-fast-value" value="<?php echo esc_attr($fast_m);?>" placeholder="provider/model-slug" style="margin-top:6px;">
+								<small>Cheaper model for intent + field extraction.</small>
+							</label>
+							<label style="margin:0">
+								<span>Quality model <small style="font-weight:400;opacity:.7;">(reply &amp; translate)</small></span>
+								<?php
+								$qual_m = (string)($options['quality_model']??'');
+								$qual_custom = ''!==$qual_m && !in_array($qual_m, self::POPULAR_MODELS, true);
+								?>
+								<select id="rfac-quality-picker">
+									<option value="">— same as unified —</option>
+									<?php foreach(self::POPULAR_MODELS as $pm): ?><option value="<?php echo esc_attr($pm);?>" <?php selected($qual_m,$pm);?>><?php echo esc_html($pm);?></option><?php endforeach;?>
+									<option value="__custom__" <?php selected($qual_custom,true);?>>Custom…</option>
+								</select>
+								<input type="text" name="quality_model" id="rfac-quality-value" value="<?php echo esc_attr($qual_m);?>" placeholder="provider/model-slug" style="margin-top:6px;">
+								<small>Better model for translations and rewrites.</small>
+							</label>
+						</div>
+					</div>
 					<div class="rfac-test-row">
 						<button type="button" class="button" id="rfac-test-openrouter"><?php esc_html_e('Test OpenRouter Connection', 'ridefleet-ai-chatbot'); ?></button>
 						<span id="rfac-test-openrouter-status" class="rfac-test-status"></span>
@@ -460,6 +508,26 @@ final class Admin {
 					<div class="rfac-test-row">
 						<button type="button" class="button" id="rfac-test-core-api"><?php esc_html_e('Test Core API Connection', 'ridefleet-ai-chatbot'); ?></button>
 						<span id="rfac-test-core-api-status" class="rfac-test-status"></span>
+					</div>
+				</section>
+
+				<section class="rfac-panel">
+					<p class="rfac-kicker">Service Area</p>
+					<h2>Operating Radius Guard</h2>
+					<p style="color:#64748b;margin-top:0;font-size:13px;">When set, trips with pickup or drop-off outside this radius are declined before pricing. Leave latitude/longitude blank to disable.</p>
+					<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;">
+						<label style="margin:0">
+							<span>Centre Latitude</span>
+							<input type="text" name="service_area_lat" value="<?php echo esc_attr((string)($options['service_area_lat']??'')); ?>" placeholder="51.0501">
+						</label>
+						<label style="margin:0">
+							<span>Centre Longitude</span>
+							<input type="text" name="service_area_lng" value="<?php echo esc_attr((string)($options['service_area_lng']??'')); ?>" placeholder="3.7174">
+						</label>
+						<label style="margin:0">
+							<span>Max radius (km)</span>
+							<input type="number" name="service_area_radius_km" min="1" max="500" value="<?php echo esc_attr((string)($options['service_area_radius_km']??100)); ?>">
+						</label>
 					</div>
 				</section>
 
@@ -503,6 +571,16 @@ final class Admin {
 						· <?php echo esc_html(number_format_i18n($usage['requests'])); ?> <?php esc_html_e('requests', 'ridefleet-ai-chatbot'); ?>
 						· <?php echo esc_html(number_format_i18n($usage['unique_ips'])); ?> <?php esc_html_e('unique IPs', 'ridefleet-ai-chatbot'); ?>
 					</div>
+				</section>
+
+				<section class="rfac-panel">
+					<p class="rfac-kicker">Flight Tracker</p>
+					<h2>Airlabs API Key</h2>
+					<label>
+						<span>Airlabs API Key</span>
+						<input type="password" name="airlabs_api_key" value="<?php echo esc_attr((string)($options['airlabs_api_key']??'')); ?>" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+						<small>Used on the Flight Tracker page. Get yours at <a href="https://airlabs.co" target="_blank" rel="noopener">airlabs.co</a>.</small>
+					</label>
 				</section>
 
 				<section class="rfac-panel rfac-panel-wide">

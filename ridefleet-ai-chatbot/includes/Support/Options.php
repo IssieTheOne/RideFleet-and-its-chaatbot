@@ -46,6 +46,12 @@ final class Options {
 			'faq_items',
 			'dispatch_response_minutes',
 			'popular_destinations',
+			'service_area_lat',
+			'service_area_lng',
+			'service_area_radius_km',
+			'fast_model',
+			'quality_model',
+			'airlabs_api_key',
 		];
 
 		$next = $current;

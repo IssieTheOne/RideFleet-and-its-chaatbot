@@ -668,3 +668,13 @@
   opacity: 0.75;
   font-weight: 500;
 }
+
+/* Typing indicator */
+.rfac-typing-indicator{display:flex !important;align-items:center;gap:5px;padding:10px 16px !important;min-width:52px;}
+.rfac-typing-indicator span{width:7px;height:7px;background:var(--rfac-muted,#94a3b8);border-radius:50%;display:inline-block;animation:rfac-bounce 1.3s infinite ease-in-out;}
+.rfac-typing-indicator span:nth-child(2){animation-delay:.18s;}
+.rfac-typing-indicator span:nth-child(3){animation-delay:.36s;}
+@keyframes rfac-bounce{0%,57%,100%{transform:translateY(0);opacity:.5;}28%{transform:translateY(-7px);opacity:1;}}
+/* Calendar link */
+.rfac-calendar-link{display:inline-flex;align-items:center;gap:6px;margin:6px 12px 4px;padding:7px 16px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:20px;font-size:12px;font-weight:500;text-decoration:none;cursor:pointer;}
+.rfac-calendar-link:hover{background:#dcfce7;color:#14532d;}

@@ -323,8 +323,18 @@ final class ConversationEngine {
 					$session['validation_error'] = __('I could not recognize that as a drop-off location. Please send a clearer place, address, station, airport, or hotel name.', 'ridefleet-ai-chatbot');
 			} else {
 				$data['dropoff_address'] = $place;
-				$session['state'] = 'quote_requested';
+				$session['state'] = 'capture_via_stop';
 			}
+			}
+		} elseif ('capture_via_stop' === $session['state']) {
+			if (preg_match('/\b(no|none|nope|skip|direct|directly|geen|nee|sans\s+arr[eê]t|rechtstreeks|aucun\s+arr[eê]t)\b/i', $message)) {
+				$session['state'] = 'quote_requested';
+			} else {
+				$place = $this->resolve_place_text($message);
+				if ($place) {
+					$data['via_stop'] = $place;
+				}
+				$session['state'] = 'quote_requested';
 			}
 		} elseif ('confirm_long_trip' === $session['state'] && $this->is_affirmative($message)) {
 			$session['state'] = 'confirm_price';
@@ -464,6 +474,9 @@ final class ConversationEngine {
 				return $this->reply($session, $this->city_confirmation_prompt($session, 'dropoff', $city ?: __('that city', 'ridefleet-ai-chatbot')));
 			}
 
+			case 'capture_via_stop':
+				return $this->reply($session, $this->via_stop_prompt($session));
+
 			case 'quote_requested':
 				return $this->quote_trip($session);
 
@@ -515,11 +528,71 @@ final class ConversationEngine {
 		return $this->reply($session, __('I can help with taxi booking questions. Where should we pick you up?', 'ridefleet-ai-chatbot'));
 	}
 
+	private function geocode_address(string $address): ?array {
+		$key = trim((string) \RideFleetAIChatbot\Support\Options::get('google_places_key', ''));
+		if ('' === $key || '' === $address) {
+			return null;
+		}
+		$cache_key = 'rfac_geocode_' . md5($address);
+		$cached = get_transient($cache_key);
+		if (is_array($cached)) {
+			return $cached;
+		}
+		$url = add_query_arg(['address' => $address, 'key' => $key], 'https://maps.googleapis.com/maps/api/geocode/json');
+		$resp = wp_remote_get($url, ['timeout' => 5, 'redirection' => 0]);
+		if (is_wp_error($resp)) {
+			return null;
+		}
+		$body = json_decode((string) wp_remote_retrieve_body($resp), true);
+		$lat = (float) ($body['results'][0]['geometry']['location']['lat'] ?? 0);
+		$lng = (float) ($body['results'][0]['geometry']['location']['lng'] ?? 0);
+		if (0.0 === $lat && 0.0 === $lng) {
+			return null;
+		}
+		$result = ['lat' => $lat, 'lng' => $lng];
+		set_transient($cache_key, $result, DAY_IN_SECONDS);
+		return $result;
+	}
+
+	private function outside_service_area(string $address): bool {
+		$centre_lat = (float) \RideFleetAIChatbot\Support\Options::get('service_area_lat', 0);
+		$centre_lng = (float) \RideFleetAIChatbot\Support\Options::get('service_area_lng', 0);
+		$radius = max(1, (int) \RideFleetAIChatbot\Support\Options::get('service_area_radius_km', 100));
+		if (0.0 === $centre_lat && 0.0 === $centre_lng) {
+			return false; // guard disabled — no centre configured
+		}
+		$coords = $this->geocode_address($address);
+		if (!$coords) {
+			return false; // can't determine — allow through
+		}
+		$dlat = deg2rad($coords['lat'] - $centre_lat);
+		$dlng = deg2rad($coords['lng'] - $centre_lng);
+		$a = sin($dlat / 2) ** 2 + cos(deg2rad($centre_lat)) * cos(deg2rad($coords['lat'])) * sin($dlng / 2) ** 2;
+		$dist = 6371 * 2 * asin(sqrt($a));
+		return $dist > $radius;
+	}
+
+	private function service_area_declined_message(array $session): string {
+		$lang = (string) ($session['collected_data']['language'] ?? 'en');
+		if ('fr' === $lang) {
+			return __('Désolé, ce trajet est en dehors de notre zone de service. Contactez dispatch directement si vous pensez que c\'est une erreur.', 'ridefleet-ai-chatbot');
+		}
+		if ('nl' === $lang) {
+			return __('Sorry, dit traject valt buiten ons servicegebied. Neem contact op met dispatch als u denkt dat dit een fout is.', 'ridefleet-ai-chatbot');
+		}
+		return __('Sorry, that route is outside our service area. Please contact dispatch directly if you believe this is an error.', 'ridefleet-ai-chatbot');
+	}
+
 	private function quote_trip(array $session, bool $continue_booking = false): array {
 		$data = $session['collected_data'];
 		if (empty($data['pickup_address']) || empty($data['dropoff_address'])) {
 			$session['state'] = empty($data['pickup_address']) ? 'capture_pickup' : 'capture_dropoff';
 			return $this->next_action($session, '');
+		}
+
+		if ($this->outside_service_area((string) $data['pickup_address']) || $this->outside_service_area((string) $data['dropoff_address'])) {
+			$session['state'] = 'halted';
+			return $this->reply($session, $this->service_area_declined_message($session));
 		}
 
 		$quote = $this->core->get_core_trip_price((string) $data['pickup_address'], (string) $data['dropoff_address'], $data);
@@ -634,6 +707,7 @@ final class ConversationEngine {
 			'luggage' => max(0, absint($data['luggage'] ?? 0)),
 			'vehicle_id' => absint($data['vehicle_id'] ?? 0),
 			'vehicle_name' => (string) ($data['vehicle_name'] ?? ''),
+			'via_stop' => !empty($data['via_stop']) ? sanitize_text_field((string) $data['via_stop']) : '',
 			'extras' => is_array($data['extras'] ?? null) ? $data['extras'] : [],
 		];
 
@@ -689,7 +763,7 @@ final class ConversationEngine {
 	 * states whose data is now complete.
 	 */
 	private function apply_one_shot_fields(array $session, string $message): array {
-		$active_states = ['greeting', 'capture_pickup', 'capture_dropoff', 'capture_passengers', 'capture_luggage', 'capture_name', 'capture_phone', 'capture_pickup_time'];
+		$active_states = ['greeting', 'capture_pickup', 'capture_dropoff', 'capture_via_stop', 'capture_passengers', 'capture_luggage', 'capture_name', 'capture_phone', 'capture_pickup_time'];
 		if (!in_array((string) ($session['state'] ?? ''), $active_states, true)) {
 			return $session;
 		}
@@ -903,6 +977,7 @@ final class ConversationEngine {
 			'capture_name' => ['name', 'language_target', 'question_type'],
 			'capture_phone' => ['phone', 'language_target', 'question_type'],
 			'capture_pickup_time' => ['pickup_time', 'language_target', 'question_type'],
+			'capture_via_stop' => ['pickup', 'dropoff', 'language_target', 'booking_id', 'question_type'],
 			default => ['pickup', 'dropoff', 'proposed_price', 'pickup_time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'language_target', 'booking_id', 'question_type'],
 		};
 		$turn['fields'] = array_intersect_key($fields, array_flip($allowed));
@@ -1136,6 +1211,10 @@ final class ConversationEngine {
 			return $this->say($session, 'ask_dropoff');
 		}
 
+		if ('capture_via_stop' === $session['state']) {
+			return $this->via_stop_prompt($session);
+		}
+
 		if ('capture_name' === $session['state']) {
 			return $this->say($session, 'ask_name');
 		}
@@ -1318,6 +1397,17 @@ final class ConversationEngine {
 			$lines[] = sprintf('%d. %s - %d passengers, %d bags%s', $index + 1, (string) ($vehicle['name'] ?? 'Vehicle'), (int) ($vehicle['passengers'] ?? 0), (int) ($vehicle['luggage'] ?? 0), $price);
 		}
 		return $this->say($session, 'ask_vehicle') . ' ' . implode(' ', $lines);
+	}
+
+	private function via_stop_prompt(array $session): string {
+		$lang = (string) ($session['collected_data']['language'] ?? 'en');
+		if ('fr' === $lang) {
+			return __('Des arrêts en chemin ? Envoyez l\'adresse ou dites non pour aller directement.', 'ridefleet-ai-chatbot');
+		}
+		if ('nl' === $lang) {
+			return __('Tussenstops onderweg? Stuur het adres of zeg nee voor een rechtstreekse rit.', 'ridefleet-ai-chatbot');
+		}
+		return __('Any stops along the way? Send the address or say no to go direct.', 'ridefleet-ai-chatbot');
 	}
 
 	private function extras_prompt(array $session): string {
@@ -2300,6 +2390,7 @@ final class ConversationEngine {
 			'booking' => [
 				'id' => $session['collected_data']['last_booking_id'] ?? null,
 				'changeRequestId' => $session['collected_data']['last_change_request_id'] ?? null,
+				'via_stop' => $session['collected_data']['via_stop'] ?? null,
 			],
 			'ui_action' => $session['ui_action'] ?? null,
 			'location_candidates' => array_values(array_unique(array_merge(

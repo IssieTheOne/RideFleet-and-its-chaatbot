@@ -1059,3 +1059,11 @@
 .rfac-faq-add {
   font-size: 13px;
 }
+
+/* Booking funnel */
+.rfac-funnel-bars{display:flex;flex-direction:column;gap:8px;}
+.rfac-funnel-bar{display:flex;align-items:center;gap:10px;}
+.rfac-funnel-bar__label{min-width:130px;font-size:12px;color:#475569;}
+.rfac-funnel-bar__track{flex:1;background:#f1f5f9;border-radius:4px;height:20px;overflow:hidden;}
+.rfac-funnel-bar__fill{height:100%;background:linear-gradient(to right,#0f766e,#22d3ee);border-radius:4px;transition:width .4s;min-width:2px;}
+.rfac-funnel-bar__count{font-size:12px;color:#64748b;min-width:80px;text-align:right;white-space:nowrap;}
