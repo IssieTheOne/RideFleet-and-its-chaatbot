@@ -43,6 +43,7 @@ final class Options {
 			'update_endpoint',
 			'license_key',
 			'chatbot_ui_theme',
+			'chatbot_language',
 			'faq_items',
 			'dispatch_response_minutes',
 			'popular_destinations',

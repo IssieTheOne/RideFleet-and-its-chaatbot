@@ -370,6 +370,145 @@
 		});
 	}
 
+	function initCustomerSearch() {
+		document.querySelectorAll('[data-rfb-customer-search]').forEach(function (wrap) {
+			var searchInput = wrap.querySelector('.rfb-customer-search-input');
+			var dropdown = wrap.querySelector('.rfb-customer-search-dropdown');
+			var form = wrap.closest('form');
+			if (!searchInput || !dropdown || !form) { return; }
+
+			var timer = null;
+
+			function fillCustomer(customer) {
+				var fn = form.querySelector('[name="customerFirstName"]');
+				var ln = form.querySelector('[name="customerLastName"]');
+				var em = form.querySelector('[name="customerEmail"]');
+				var ph = form.querySelector('[name="customerPhone"]');
+				if (fn) { fn.value = customer.first_name; }
+				if (ln) { ln.value = customer.last_name; }
+				if (em) { em.value = customer.email; }
+				if (ph) { ph.value = customer.phone; }
+				searchInput.value = customer.label + (customer.email ? ' · ' + customer.email : '');
+				dropdown.hidden = true;
+				dropdown.innerHTML = '';
+			}
+
+			function showResults(results) {
+				dropdown.innerHTML = '';
+				if (!results.length) {
+					var li = document.createElement('li');
+					li.className = 'rfb-customer-search-empty';
+					li.textContent = 'No customers found';
+					dropdown.appendChild(li);
+					dropdown.hidden = false;
+					return;
+				}
+				results.forEach(function (c) {
+					var li = document.createElement('li');
+					li.className = 'rfb-customer-search-item';
+					li.innerHTML = '<strong>' + escapeHtml(c.label) + '</strong>' +
+						(c.email ? '<span>' + escapeHtml(c.email) + '</span>' : '') +
+						(c.phone ? '<span>' + escapeHtml(c.phone) + '</span>' : '');
+					li.addEventListener('click', function () { fillCustomer(c); });
+					dropdown.appendChild(li);
+				});
+				dropdown.hidden = false;
+			}
+
+			searchInput.addEventListener('input', function () {
+				clearTimeout(timer);
+				var q = searchInput.value.trim();
+				if (q.length < 2) { dropdown.hidden = true; return; }
+				timer = setTimeout(function () {
+					var cfg = window.RideFleetAdmin || {};
+					var url = (cfg.ajaxUrl || '/wp-admin/admin-ajax.php') +
+						'?action=rfb_customer_search&nonce=' + encodeURIComponent(cfg.nonce || '') + '&q=' + encodeURIComponent(q);
+					fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+						if (data.success) { showResults(data.data); }
+					}).catch(function () {});
+				}, 300);
+			});
+
+			document.addEventListener('click', function (e) {
+				if (!wrap.contains(e.target)) { dropdown.hidden = true; }
+			});
+		});
+	}
+
+	function initQuotePreview() {
+		document.querySelectorAll('[data-rfb-route-builder]').forEach(function (builder) {
+			var previewWrap  = builder.querySelector('[data-rfb-price-preview]');
+			var previewAmt   = previewWrap && previewWrap.querySelector('[data-rfb-price-amount]');
+			var previewLbl   = previewWrap && previewWrap.querySelector('[data-rfb-price-label]');
+			if (!previewWrap || !previewAmt) { return; }
+
+			var pickupInput  = builder.querySelector('[name="pickupAddress"]');
+			var dropoffInput = builder.querySelector('[name="dropoffAddress"]');
+			var distInput    = builder.querySelector('[name="distance"]');
+			var durInput     = builder.querySelector('[name="durationMinutes"]');
+			var dateInput    = builder.querySelector('[name="pickupDate"]');
+			var timeInput    = builder.querySelector('[name="pickupTime"]');
+			var timer        = null;
+
+			function fetchPreview() {
+				clearTimeout(timer);
+				timer = setTimeout(function () {
+					var pickup  = pickupInput  ? pickupInput.value.trim()  : '';
+					var dropoff = dropoffInput ? dropoffInput.value.trim() : '';
+					var dist    = distInput    ? distInput.value  : '';
+					var dur     = durInput     ? durInput.value   : '';
+					var dateV   = dateInput    ? dateInput.value  : '';
+					var timeV   = timeInput    ? timeInput.value  : '';
+					if (!pickup || !dropoff) { return; }
+
+					var cfg  = window.RideFleetAdmin || {};
+					var body = new FormData();
+					body.append('action', 'rfb_quote_preview');
+					body.append('nonce', cfg.nonce || '');
+					body.append('pickup', pickup);
+					body.append('dropoff', dropoff);
+					body.append('distance', dist);
+					body.append('duration', dur);
+					body.append('pickup_at', dateV + ' ' + timeV);
+
+					previewAmt.textContent = '…';
+					previewWrap.hidden = false;
+
+					fetch(cfg.ajaxUrl || '/wp-admin/admin-ajax.php', { method: 'POST', body: body })
+						.then(function (r) { return r.json(); })
+						.then(function (data) {
+							if (data.success && data.data) {
+								var d = data.data;
+								previewAmt.textContent = d.currency + ' ' + Number(d.price).toFixed(2);
+								var srcLabels = { flat_rate: 'Flat rate', zone: 'Zone price', meter: 'Meter estimate', core: 'Core rule' };
+								var label = srcLabels[d.pricing_source] || d.pricing_source || 'Estimated price';
+								if (d.zone_name) { label += ' · ' + d.zone_name; }
+								previewLbl.textContent = label;
+								previewWrap.classList.add('rfb-price-preview--ready');
+							} else {
+								previewAmt.textContent = '—';
+								previewLbl.textContent = data.data || 'Fill addresses to see price';
+							}
+						}).catch(function () { previewAmt.textContent = '—'; });
+				}, 500);
+			}
+
+			[pickupInput, dropoffInput].forEach(function (el) {
+				if (el) {
+					el.addEventListener('rfb:place-selected', fetchPreview);
+					el.addEventListener('change', fetchPreview);
+				}
+			});
+			[distInput, durInput].forEach(function (el) {
+				if (el) { el.addEventListener('change', fetchPreview); }
+			});
+		});
+	}
+
+	function escapeHtml(str) {
+		return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+	}
+
 	ready(function () {
 		if (window.RideFleetAdmin && window.RideFleetAdmin.screen && window.RideFleetAdmin.screen.indexOf('ridefleet-settings') !== -1) {
 			console.info('[RideFleet] Dispatcher API settings', {
@@ -378,6 +517,8 @@
 				baseUrl: window.RideFleetAdmin.dispatcherBaseUrl || ''
 			});
 		}
+		initCustomerSearch();
+		initQuotePreview();
 		mapsReady(function (maps) {
 			initPlaceSearch(maps);
 			initPolygonHelpers(maps);

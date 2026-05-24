@@ -209,6 +209,11 @@ final class CoreRulesPage {
 				<input type="number" step="0.000001" name="flat_rates[<?php echo esc_attr($index); ?>][hub_lng]" value="<?php echo esc_attr($hub_lng); ?>" placeholder="<?php esc_attr_e('Longitude', 'ridefleet-booking'); ?>">
 			</div>
 			<label>
+				<span><?php esc_html_e('Hub radius (km)', 'ridefleet-booking'); ?></span>
+				<input type="number" step="0.1" min="0.1" max="50" name="flat_rates[<?php echo esc_attr($index); ?>][hub_radius_km]" value="<?php echo esc_attr((string) ($rate['hub_radius_km'] ?? '3')); ?>" placeholder="3">
+				<small><?php esc_html_e('Pickup must be within this radius of the hub. 3 km covers most airport/station areas.', 'ridefleet-booking'); ?></small>
+			</label>
+			<label>
 				<span><?php esc_html_e('Zone type', 'ridefleet-booking'); ?></span>
 				<select name="flat_rates[<?php echo esc_attr($index); ?>][zone_type]">
 					<option value="radius" <?php selected($rate['zone_type'] ?? 'radius', 'radius'); ?>><?php esc_html_e('Radius', 'ridefleet-booking'); ?></option>
@@ -248,6 +253,7 @@ final class CoreRulesPage {
 					'lat' => (float) ($row['hub_lat'] ?? 0),
 					'lng' => (float) ($row['hub_lng'] ?? 0),
 				],
+				'hub_radius_km' => max(0.1, (float) ($row['hub_radius_km'] ?? 3)),
 				'zone_type' => self::choice($row['zone_type'] ?? 'radius', ['radius', 'zipcodes', 'polygon'], 'radius'),
 				'zone_data' => sanitize_textarea_field(wp_unslash($row['zone_data'] ?? '')),
 				'price' => max(0, (float) ($row['price'] ?? 0)),

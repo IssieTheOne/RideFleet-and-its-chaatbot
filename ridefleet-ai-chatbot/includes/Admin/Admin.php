@@ -43,7 +43,10 @@ final class Admin {
 		add_action('admin_post_rfac_delete_chat_session', [ChatHistoryPage::class, 'delete']);
 		add_action('admin_post_rfac_export_chat_sessions', [ChatHistoryPage::class, 'export_csv']);
 		add_action('admin_post_rfac_update_change_request', [ChangeRequestsPage::class, 'update']);
+		add_action('admin_init', [ChangeRequestsPage::class, 'handle_quick_action']);
 		add_action('admin_post_rfac_purge_errors', [ErrorLogPage::class, 'purge']);
+		add_action('admin_post_rfac_purge_diagnostic_logs', [DiagnosticLogPage::class, 'purge']);
+		add_action('admin_post_rfac_export_diagnostic_logs', [DiagnosticLogPage::class, 'export_json']);
 		add_action('admin_post_rfac_erase_customer', [PrivacyPage::class, 'erase']);
 		add_action('wp_ajax_rfac_test_openrouter', [self::class, 'ajax_test_openrouter']);
 		add_action('wp_ajax_rfac_test_core_api', [self::class, 'ajax_test_core_api']);
@@ -87,6 +90,25 @@ final class Admin {
 
 		add_submenu_page(
 			'ridefleet-ai-chatbot',
+			__('Chatbot Settings', 'ridefleet-ai-chatbot'),
+			__('Settings', 'ridefleet-ai-chatbot'),
+			'manage_options',
+			'ridefleet-ai-chatbot-settings',
+			[SettingsPage::class, 'render']
+		);
+
+		add_submenu_page(
+			'ridefleet-ai-chatbot',
+			__('Chatbot API Logs', 'ridefleet-ai-chatbot'),
+			__('API Logs', 'ridefleet-ai-chatbot'),
+			'manage_options',
+			'ridefleet-ai-chatbot-api-logs',
+			[DiagnosticLogPage::class, 'render']
+		);
+
+		// Hidden pages — accessible via direct URL / links within other pages
+		add_submenu_page(
+			null,
 			__('Error Log', 'ridefleet-ai-chatbot'),
 			__('Error Log', 'ridefleet-ai-chatbot'),
 			'manage_options',
@@ -95,7 +117,7 @@ final class Admin {
 		);
 
 		add_submenu_page(
-			'ridefleet-ai-chatbot',
+			null,
 			__('Data Privacy', 'ridefleet-ai-chatbot'),
 			__('Privacy', 'ridefleet-ai-chatbot'),
 			'manage_options',
@@ -226,13 +248,18 @@ final class Admin {
 				'faq_items' => $faq_items,
 				'popular_destinations' => $sanitized_popular_destinations,
 				'dispatch_response_minutes' => $sanitized_dispatch_minutes,
-				'service_area_lat'      => sanitize_text_field(wp_unslash($_POST['service_area_lat'] ?? '')),
-				'service_area_lng'      => sanitize_text_field(wp_unslash($_POST['service_area_lng'] ?? '')),
-				'service_area_radius_km'=> max(1, absint($_POST['service_area_radius_km'] ?? 100)),
+				'service_area_lat'       => sanitize_text_field(wp_unslash($_POST['service_area_lat'] ?? '')),
+				'service_area_lng'       => sanitize_text_field(wp_unslash($_POST['service_area_lng'] ?? '')),
+				'service_area_radius_km' => max(1, absint($_POST['service_area_radius_km'] ?? 100)),
+				// 0 = disabled/unlimited for both caps.
+				'ai_per_ip_daily_cap'   => max(0, (int) wp_unslash($_POST['ai_per_ip_daily_cap'] ?? 200)),
+				'ai_daily_token_budget' => max(0, (int) wp_unslash($_POST['ai_daily_token_budget'] ?? 250000)),
 				'fast_model'    => sanitize_text_field(wp_unslash($_POST['fast_model'] ?? '')),
 				'quality_model' => sanitize_text_field(wp_unslash($_POST['quality_model'] ?? '')),
 				'stripe_secret_key'           => sanitize_text_field(wp_unslash($_POST['rfac_stripe_secret_key'] ?? '')),
 				'stripe_payment_link_enabled' => !empty($_POST['rfac_stripe_payment_link_enabled']) ? 1 : 0,
+				'chatbot_language'            => sanitize_key(wp_unslash($_POST['chatbot_language'] ?? 'auto')),
+				'terms_url'                   => esc_url_raw(wp_unslash($_POST['terms_url'] ?? '')),
 			]
 		);
 
@@ -325,10 +352,11 @@ final class Admin {
 			<div class="rfac-hero">
 				<div>
 					<p class="rfac-kicker"><?php esc_html_e('RideFleet AI Chatbot', 'ridefleet-ai-chatbot'); ?></p>
-					<h1><?php esc_html_e('Chatbot Settings', 'ridefleet-ai-chatbot'); ?></h1>
-					<p><?php esc_html_e('Configure the AI model, booking API, company context, widget theme, and conversation guardrails.', 'ridefleet-ai-chatbot'); ?></p>
+					<h1><?php esc_html_e('Dashboard', 'ridefleet-ai-chatbot'); ?></h1>
+					<p><?php esc_html_e('Monitor conversations, bookings, and change requests at a glance.', 'ridefleet-ai-chatbot'); ?></p>
 				</div>
 				<div class="rfac-hero-actions">
+					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-settings')); ?>" class="button button-primary">⚙️ <?php esc_html_e('Settings', 'ridefleet-ai-chatbot'); ?></a>
 					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-history')); ?>" class="button">💬 <?php esc_html_e('Conversations', 'ridefleet-ai-chatbot'); ?></a>
 					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-changes')); ?>" class="button">✏️ <?php esc_html_e('Change Requests', 'ridefleet-ai-chatbot'); ?></a>
 				</div>
@@ -338,22 +366,25 @@ final class Admin {
 				<div class="rfac-stat">
 					<span class="rfac-stat-label"><?php esc_html_e('Sessions today', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['sessions_today'])); ?></span>
-					<small style="color:#64748b;font-size:11px;font-weight:600;"><?php printf(esc_html__('%s this week', 'ridefleet-ai-chatbot'), '<strong>' . esc_html(number_format_i18n($stats['sessions_week'])) . '</strong>'); ?></small>
+					<p><?php printf(esc_html__('%s chats started this week.', 'ridefleet-ai-chatbot'), number_format_i18n($stats['sessions_week'])); ?></p>
 				</div>
 				<div class="rfac-stat">
 					<span class="rfac-stat-label"><?php esc_html_e('All-time sessions', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['total_sessions'])); ?></span>
+					<p><?php esc_html_e('Total conversations captured by the chatbot.', 'ridefleet-ai-chatbot'); ?></p>
 				</div>
 				<div class="rfac-stat">
 					<span class="rfac-stat-label"><?php esc_html_e('Confirmed bookings', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['total_bookings'])); ?></span>
-					<small style="color:#64748b;font-size:11px;font-weight:600;"><?php printf(esc_html__('%s this week', 'ridefleet-ai-chatbot'), '<strong>' . esc_html(number_format_i18n($stats['bookings_week'])) . '</strong>'); ?></small>
+					<p><?php printf(esc_html__('%s booked this week via the chatbot.', 'ridefleet-ai-chatbot'), number_format_i18n($stats['bookings_week'])); ?></p>
 				</div>
 				<div class="rfac-stat <?php echo $stats['pending_changes'] > 0 ? 'rfac-stat-pending' : ''; ?>">
 					<span class="rfac-stat-label"><?php esc_html_e('Pending requests', 'ridefleet-ai-chatbot'); ?></span>
 					<span class="rfac-stat-value"><?php echo esc_html(number_format_i18n($stats['pending_changes'])); ?></span>
 					<?php if ($stats['pending_changes'] > 0) : ?>
-						<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-changes')); ?>" style="font-size:11px;font-weight:600;color:#b45309;text-decoration:none;"><?php esc_html_e('Review →', 'ridefleet-ai-chatbot'); ?></a>
+						<p><a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-changes')); ?>" style="font-weight:700;color:#b45309;text-decoration:none;"><?php esc_html_e('Review change requests →', 'ridefleet-ai-chatbot'); ?></a></p>
+					<?php else : ?>
+						<p><?php esc_html_e('Booking change and fare negotiation requests.', 'ridefleet-ai-chatbot'); ?></p>
 					<?php endif; ?>
 				</div>
 			</div>
@@ -419,12 +450,18 @@ final class Admin {
 			</section>
 			<?php endif; ?>
 
+		</div>
+		<?php
+	}
+
+	public static function render_settings_form(array $options, array $theme): void {
+		?>
 			<form method="post" class="rfac-shell">
 				<?php wp_nonce_field('rfac_save_settings', 'rfac_settings_nonce'); ?>
 
 				<section class="rfac-panel rfac-panel-wide">
 					<div>
-						<p class="rfac-kicker"><?php esc_html_e('OpenRouter Gateway', 'ridefleet-ai-chatbot'); ?></p>
+						<p class="rfac-kicker">🤖 <?php esc_html_e('OpenRouter Gateway', 'ridefleet-ai-chatbot'); ?></p>
 						<h2><?php esc_html_e('Model and Credential Settings', 'ridefleet-ai-chatbot'); ?></h2>
 					</div>
 					<label>
@@ -486,7 +523,7 @@ final class Admin {
 				</section>
 
 				<section class="rfac-panel">
-					<p class="rfac-kicker"><?php esc_html_e('Core Booking API', 'ridefleet-ai-chatbot'); ?></p>
+					<p class="rfac-kicker">🔌 <?php esc_html_e('Core Booking API', 'ridefleet-ai-chatbot'); ?></p>
 					<h2><?php esc_html_e('Read Price, Write Reservation', 'ridefleet-ai-chatbot'); ?></h2>
 					<label>
 						<span><?php esc_html_e('Core Plugin Base URL', 'ridefleet-ai-chatbot'); ?></span>
@@ -500,6 +537,11 @@ final class Admin {
 						<span><?php esc_html_e('Dispatch Contact Number', 'ridefleet-ai-chatbot'); ?></span>
 						<input type="text" name="dispatch_contact_number" value="<?php echo esc_attr((string) ($options['dispatch_contact_number'] ?? '')); ?>" placeholder="+32 ...">
 						<small><?php esc_html_e('Shown when no vehicle/extras configuration can satisfy the requested ride.', 'ridefleet-ai-chatbot'); ?></small>
+					</label>
+					<label>
+						<span><?php esc_html_e('Terms & Conditions URL', 'ridefleet-ai-chatbot'); ?></span>
+						<input type="url" name="terms_url" value="<?php echo esc_attr((string) ($options['terms_url'] ?? '')); ?>" placeholder="https://my-taxi-site.com/terms">
+						<small><?php esc_html_e('If set, a "By submitting you accept our T&amp;C" note with a link is shown on the booking review screen. Leave blank to disable.', 'ridefleet-ai-chatbot'); ?></small>
 					</label>
 					<div class="rfac-endpoints">
 						<code>GET /wp-json/taxi-booking/v1/calculate-price</code>
@@ -516,28 +558,78 @@ final class Admin {
 				</section>
 
 				<section class="rfac-panel">
-					<p class="rfac-kicker">Service Area</p>
-					<h2>Operating Radius Guard</h2>
-					<p style="color:#64748b;margin-top:0;font-size:13px;">When set, trips with pickup or drop-off outside this radius are declined before pricing. Leave latitude/longitude blank to disable.</p>
+					<p class="rfac-kicker">📍 <?php esc_html_e('Service Area', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Operating Radius Guard', 'ridefleet-ai-chatbot'); ?></h2>
+					<?php if (class_exists('\\RideFleetBooking\\Booking\\CoreBookingPricingEngine')) :
+						$core_rules   = \RideFleetBooking\Support\Options::get('core_booking_rules', []);
+						$core_sa      = is_array($core_rules['global_service_area'] ?? null) ? $core_rules['global_service_area'] : [];
+						$sa_enabled   = !empty($core_sa['enabled']);
+						$sa_type      = (string) ($core_sa['type'] ?? 'radius');
+						$sa_data      = (string) ($core_sa['data'] ?? '');
+						$core_rules_url = admin_url('admin.php?page=ridefleet-booking-rules');
+					?>
+					<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:#f0fdf9;border:1px solid #a7f3d0;border-radius:8px;font-size:13px;">
+						<span style="font-size:20px;line-height:1;">🔗</span>
+						<div>
+							<strong><?php esc_html_e('Controlled by RideFleet Booking', 'ridefleet-ai-chatbot'); ?></strong><br>
+							<span style="color:#374151;">
+							<?php if ($sa_enabled) :
+								echo esc_html(sprintf(
+									__('Service area is active (%s). The chatbot reads this automatically — no duplicate configuration needed.', 'ridefleet-ai-chatbot'),
+									$sa_type
+								));
+							else :
+								esc_html_e('Service area guard is currently disabled in RideFleet Booking. All trip origins will be accepted.', 'ridefleet-ai-chatbot');
+							endif; ?>
+							</span>
+							<br><a href="<?php echo esc_url($core_rules_url); ?>" style="color:var(--rfac-primary,#0f766e);font-weight:600;">
+								<?php esc_html_e('Edit in RideFleet Booking → Core Rules', 'ridefleet-ai-chatbot'); ?>
+							</a>
+						</div>
+					</div>
+					<?php else : ?>
+					<p style="color:#64748b;margin-top:0;font-size:13px;"><?php esc_html_e('When set, trips with pickup or drop-off outside this radius are declined before pricing. Leave latitude/longitude blank to disable.', 'ridefleet-ai-chatbot'); ?></p>
 					<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;">
 						<label style="margin:0">
-							<span>Centre Latitude</span>
+							<span><?php esc_html_e('Centre Latitude', 'ridefleet-ai-chatbot'); ?></span>
 							<input type="text" name="service_area_lat" value="<?php echo esc_attr((string)($options['service_area_lat']??'')); ?>" placeholder="51.0501">
 						</label>
 						<label style="margin:0">
-							<span>Centre Longitude</span>
+							<span><?php esc_html_e('Centre Longitude', 'ridefleet-ai-chatbot'); ?></span>
 							<input type="text" name="service_area_lng" value="<?php echo esc_attr((string)($options['service_area_lng']??'')); ?>" placeholder="3.7174">
 						</label>
 						<label style="margin:0">
-							<span>Max radius (km)</span>
+							<span><?php esc_html_e('Max radius (km)', 'ridefleet-ai-chatbot'); ?></span>
 							<input type="number" name="service_area_radius_km" min="1" max="500" value="<?php echo esc_attr((string)($options['service_area_radius_km']??100)); ?>">
 						</label>
 					</div>
+					<?php endif; ?>
 				</section>
 
 				<section class="rfac-panel">
-					<p class="rfac-kicker"><?php esc_html_e('Guardrailed Assistant', 'ridefleet-ai-chatbot'); ?></p>
+					<p class="rfac-kicker">📋 <?php esc_html_e('Guardrailed Assistant', 'ridefleet-ai-chatbot'); ?></p>
 					<h2><?php esc_html_e('Company Bio and Policy Context', 'ridefleet-ai-chatbot'); ?></h2>
+
+					<?php
+					$lang_opt = (string) ($options['chatbot_language'] ?? 'auto');
+					$lang_choices = [
+						'auto' => __('Auto-detect (follows user language)', 'ridefleet-ai-chatbot'),
+						'en'   => __('English', 'ridefleet-ai-chatbot'),
+						'nl'   => __('Dutch — Nederlands', 'ridefleet-ai-chatbot'),
+						'fr'   => __('French — Français', 'ridefleet-ai-chatbot'),
+						'de'   => __('German — Deutsch', 'ridefleet-ai-chatbot'),
+					];
+					?>
+					<label>
+						<span><?php esc_html_e('Chatbot Language', 'ridefleet-ai-chatbot'); ?></span>
+						<select name="chatbot_language">
+							<?php foreach ($lang_choices as $val => $label) : ?>
+								<option value="<?php echo esc_attr($val); ?>" <?php selected($lang_opt, $val); ?>><?php echo esc_html($label); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<small><?php esc_html_e('Pin the chatbot to one language for consistent customer experience. Auto-detect tries to follow the customer\'s messages but can be unpredictable in multilingual situations.', 'ridefleet-ai-chatbot'); ?></small>
+					</label>
+
 					<label>
 						<span><?php esc_html_e('Company Bio', 'ridefleet-ai-chatbot'); ?></span>
 						<textarea name="company_bio" id="rfac-company-bio" rows="10" placeholder="<?php esc_attr_e('Fleet details, service policies, FAQs, preferred tone...', 'ridefleet-ai-chatbot'); ?>"><?php echo esc_textarea((string) $options['company_bio']); ?></textarea>
@@ -554,8 +646,8 @@ final class Admin {
 				</section>
 
 				<section class="rfac-panel rfac-panel-wide">
-					<p class="rfac-kicker"><?php esc_html_e('Production safeguards', 'ridefleet-ai-chatbot'); ?></p>
-					<h2><?php esc_html_e('AI cost ceiling', 'ridefleet-ai-chatbot'); ?></h2>
+					<p class="rfac-kicker">🛡️ <?php esc_html_e('Production safeguards', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('AI Cost Ceiling', 'ridefleet-ai-chatbot'); ?></h2>
 					<div class="rfac-shell" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
 						<label style="margin: 0;">
 							<span><?php esc_html_e('Daily token budget (across all users)', 'ridefleet-ai-chatbot'); ?></span>
@@ -578,7 +670,7 @@ final class Admin {
 				</section>
 
 <section class="rfac-panel rfac-panel-wide">
-					<p class="rfac-kicker"><?php esc_html_e('Distribution', 'ridefleet-ai-chatbot'); ?></p>
+					<p class="rfac-kicker">🚀 <?php esc_html_e('Distribution', 'ridefleet-ai-chatbot'); ?></p>
 					<h2><?php esc_html_e('Over-the-air updates', 'ridefleet-ai-chatbot'); ?></h2>
 					<p style="color:#64748b;margin-top:0;">
 						<?php esc_html_e('Point this at a JSON manifest endpoint (e.g. a private GitHub release page) and WordPress will surface updates on the Plugins screen, no manual ZIP uploads needed.', 'ridefleet-ai-chatbot'); ?>
@@ -597,7 +689,7 @@ final class Admin {
 				</section>
 
 				<section class="rfac-panel rfac-panel-wide">
-					<p class="rfac-kicker"><?php esc_html_e('Operations', 'ridefleet-ai-chatbot'); ?></p>
+					<p class="rfac-kicker">🔔 <?php esc_html_e('Operations', 'ridefleet-ai-chatbot'); ?></p>
 					<h2><?php esc_html_e('Notifications and Retention', 'ridefleet-ai-chatbot'); ?></h2>
 					<div class="rfac-shell" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
 						<label style="margin: 0;">
@@ -618,7 +710,7 @@ final class Admin {
 				</section>
 
 				<section class="rfac-panel rfac-panel-wide">
-					<p class="rfac-kicker"><?php esc_html_e('Frontend Widget', 'ridefleet-ai-chatbot'); ?></p>
+					<p class="rfac-kicker">🎨 <?php esc_html_e('Frontend Widget', 'ridefleet-ai-chatbot'); ?></p>
 					<h2><?php esc_html_e('Chat Theme', 'ridefleet-ai-chatbot'); ?></h2>
 					<div class="rfac-color-grid">
 						<?php
@@ -651,32 +743,46 @@ final class Admin {
 				</section>
 
 				<section class="rfac-panel rfac-panel-wide">
-					<h2><?php esc_html_e('Embed', 'ridefleet-ai-chatbot'); ?></h2>
+					<p class="rfac-kicker">📎 <?php esc_html_e('Integration', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Embed Shortcode', 'ridefleet-ai-chatbot'); ?></h2>
 					<p><?php esc_html_e('Place this shortcode on any customer-facing page:', 'ridefleet-ai-chatbot'); ?></p>
 					<code>[ridefleet_ai_chatbot]</code>
 				</section>
 
-				<!-- Popular destinations -->
-				<div class="rfac-card">
-					<h2 class="rfac-card__title"><?php esc_html_e( 'Popular Destinations', 'ridefleet-ai-chatbot' ); ?></h2>
-					<p class="rfac-card__subtitle"><?php esc_html_e( 'Suggested drop-off quick-reply chips shown when the customer has confirmed a pickup. One destination per line.', 'ridefleet-ai-chatbot' ); ?></p>
-					<textarea name="popular_destinations_raw" rows="6" class="large-text"><?php
-						$dests = (array) \RideFleetAIChatbot\Support\Options::get( 'popular_destinations', [] );
-						echo esc_textarea( implode( "\n", array_filter( $dests ) ) );
-					?></textarea>
-					<p class="description"><?php esc_html_e( 'Example: JFK Airport, New York', 'ridefleet-ai-chatbot' ); ?></p>
-				</div>
+				<!-- Popular destinations / Preset chips -->
+				<section class="rfac-panel">
+					<p class="rfac-kicker">🗺️ <?php esc_html_e('Quick Replies', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Preset Location Chips', 'ridefleet-ai-chatbot'); ?></h2>
+					<p style="color:#64748b;margin-top:0;font-size:13px;"><?php esc_html_e('Suggested location chips shown during pickup and drop-off capture. One per line. Optionally append coordinates for instant selection without autocomplete: Name|lat,lng', 'ridefleet-ai-chatbot'); ?></p>
+					<label>
+						<textarea name="popular_destinations_raw" rows="9" style="width:100%;font-family:monospace;font-size:13px;"><?php
+							$dests = (array) \RideFleetAIChatbot\Support\Options::get( 'popular_destinations', [] );
+							echo esc_textarea( implode( "\n", array_filter( $dests ) ) );
+						?></textarea>
+						<small><?php esc_html_e('Examples: "Burlington Airport" or "Burlington Airport|44.4719,-73.1533" (with coordinates)', 'ridefleet-ai-chatbot'); ?></small>
+					</label>
+				</section>
+
 				<!-- Dispatch response time -->
-				<div class="rfac-card">
-					<h2 class="rfac-card__title"><?php esc_html_e( 'Dispatch Response Time', 'ridefleet-ai-chatbot' ); ?></h2>
-					<p class="rfac-card__subtitle"><?php esc_html_e( 'Estimated minutes until dispatch confirms a booking. Shown in the booking confirmation message.', 'ridefleet-ai-chatbot' ); ?></p>
-					<input type="number" name="dispatch_response_minutes" min="1" max="120" value="<?php echo esc_attr( (string) \RideFleetAIChatbot\Support\Options::get( 'dispatch_response_minutes', 15 ) ); ?>" style="width:80px" />
-					<span class="description"><?php esc_html_e( 'minutes', 'ridefleet-ai-chatbot' ); ?></span>
-				</div>
+				<section class="rfac-panel">
+					<p class="rfac-kicker">⏱️ <?php esc_html_e('Dispatch', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Response Time', 'ridefleet-ai-chatbot'); ?></h2>
+					<p style="color:#64748b;margin-top:0;font-size:13px;"><?php esc_html_e('Estimated minutes until dispatch confirms. Shown in the booking confirmation message.', 'ridefleet-ai-chatbot'); ?></p>
+					<label>
+						<span><?php esc_html_e('Confirmation delay (minutes)', 'ridefleet-ai-chatbot'); ?></span>
+						<div style="display:flex;align-items:center;gap:10px;">
+							<input type="number" name="dispatch_response_minutes" min="1" max="120" value="<?php echo esc_attr( (string) \RideFleetAIChatbot\Support\Options::get( 'dispatch_response_minutes', 15 ) ); ?>" style="width:90px;">
+							<span style="color:#64748b;font-size:13px;"><?php esc_html_e('minutes', 'ridefleet-ai-chatbot'); ?></span>
+						</div>
+						<small><?php esc_html_e('1–120 minutes. Shown to the customer after booking is confirmed.', 'ridefleet-ai-chatbot'); ?></small>
+					</label>
+				</section>
+
 				<!-- FAQ section -->
-				<div class="rfac-card rfac-card--faq">
-					<h2 class="rfac-card__title"><?php esc_html_e( 'Custom FAQ Answers', 'ridefleet-ai-chatbot' ); ?></h2>
-					<p class="rfac-card__subtitle"><?php esc_html_e( 'Up to 10 Q&A pairs. When a customer message matches a question, the chatbot answers instantly without using AI.', 'ridefleet-ai-chatbot' ); ?></p>
+				<section class="rfac-panel rfac-panel-wide">
+					<p class="rfac-kicker">❓ <?php esc_html_e('Instant Answers', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Custom FAQ Answers', 'ridefleet-ai-chatbot'); ?></h2>
+					<p style="color:#64748b;margin-top:0;font-size:13px;"><?php esc_html_e('Up to 10 Q&A pairs. When a customer message matches a question, the chatbot answers instantly without using AI tokens.', 'ridefleet-ai-chatbot'); ?></p>
 					<div id="rfac-faq-list" class="rfac-faq-list">
 <?php
 $faq_items = (array) \RideFleetAIChatbot\Support\Options::get( 'faq_items', [] );
@@ -699,12 +805,12 @@ foreach ( $faq_items as $idx => $item ) :
 					<button type="button" id="rfac-faq-add" class="button rfac-faq-add" <?php echo count($faq_items) >= 10 ? 'disabled' : ''; ?>>
 						<?php esc_html_e( '+ Add FAQ item', 'ridefleet-ai-chatbot' ); ?>
 					</button>
-				</div>
+				</section>
 
 				<!-- Stripe Payment Links -->
-				<section class="rfac-panel rfac-panel-wide" style="margin-top:18px;">
-					<p class="rfac-kicker"><?php esc_html_e('Payments', 'ridefleet-ai-chatbot'); ?></p>
-					<h2>💳 <?php esc_html_e('Stripe Payment Links', 'ridefleet-ai-chatbot'); ?></h2>
+				<section class="rfac-panel rfac-panel-wide">
+					<p class="rfac-kicker">💳 <?php esc_html_e('Payments', 'ridefleet-ai-chatbot'); ?></p>
+					<h2><?php esc_html_e('Stripe Payment Links', 'ridefleet-ai-chatbot'); ?></h2>
 					<p style="color:#64748b;margin-top:0;font-size:13px;"><?php esc_html_e('When enabled, a Stripe Checkout link will be included in the confirmation message so customers can pay immediately.', 'ridefleet-ai-chatbot'); ?></p>
 					<label>
 						<span><?php esc_html_e('Stripe Secret Key', 'ridefleet-ai-chatbot'); ?></span>
@@ -717,11 +823,10 @@ foreach ( $faq_items as $idx => $item ) :
 					</label>
 				</section>
 
-			<p class="submit">
-					<button class="button button-primary" type="submit"><?php esc_html_e('Save Chatbot Settings', 'ridefleet-ai-chatbot'); ?></button>
-				</p>
+			<div style="grid-column:1/-1;padding-top:8px;">
+					<button type="submit" class="button button-primary button-large"><?php esc_html_e('Save Settings', 'ridefleet-ai-chatbot'); ?></button>
+				</div>
 			</form>
-		</div>
 		<?php
 	}
 }

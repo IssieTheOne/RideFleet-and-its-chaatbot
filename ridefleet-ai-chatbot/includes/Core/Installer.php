@@ -27,7 +27,7 @@ final class Installer {
 	}
 
 	public static function maybe_update(): void {
-		if (get_option('rfac_db_version') === RFAC_VERSION) {
+		if (get_option('rfac_db_version') === RFAC_VERSION && self::diagnostic_table_exists()) {
 			self::schedule_cron();
 			return;
 		}
@@ -56,6 +56,7 @@ final class Installer {
 		$change_requests = $wpdb->prefix . 'rfac_change_requests';
 		$errors = $wpdb->prefix . 'rfac_error_log';
 		$usage = $wpdb->prefix . 'rfac_ai_usage';
+		$diagnostics = $wpdb->prefix . 'rfac_diagnostic_events';
 
 		dbDelta(
 			"CREATE TABLE {$sessions} (
@@ -171,7 +172,32 @@ final class Installer {
 			) {$charset};"
 		);
 
+		dbDelta(
+			"CREATE TABLE {$diagnostics} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				session_id bigint(20) unsigned NULL,
+				session_key varchar(100) NOT NULL DEFAULT '',
+				event_type varchar(60) NOT NULL DEFAULT '',
+				source varchar(60) NOT NULL DEFAULT '',
+				summary text NULL,
+				context longtext NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY session_id (session_id),
+				KEY session_key (session_key),
+				KEY event_type (event_type),
+				KEY source (source),
+				KEY created_at (created_at)
+			) {$charset};"
+		);
+
 		update_option('rfac_db_version', RFAC_VERSION);
+	}
+
+	private static function diagnostic_table_exists(): bool {
+		global $wpdb;
+		$table = $wpdb->prefix . 'rfac_diagnostic_events';
+		return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table;
 	}
 
 	private static function seed_options(): void {

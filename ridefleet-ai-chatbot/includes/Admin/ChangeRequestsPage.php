@@ -12,6 +12,40 @@ if (!defined('ABSPATH')) {
 }
 
 final class ChangeRequestsPage {
+	public static function handle_quick_action(): void {
+		$action = sanitize_key(wp_unslash($_GET['rfac_quick_action'] ?? ''));
+		if (!in_array($action, ['approve', 'reject'], true)) {
+			return;
+		}
+		if (!current_user_can('manage_options')) {
+			wp_die(esc_html__('Access denied.', 'ridefleet-ai-chatbot'));
+		}
+		$id    = absint($_GET['id'] ?? 0);
+		$nonce = sanitize_key(wp_unslash($_GET['_wpnonce'] ?? ''));
+		if (!wp_verify_nonce($nonce, 'rfac_quick_action_' . $id)) {
+			wp_die(esc_html__('Security check failed.', 'ridefleet-ai-chatbot'));
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'rfac_change_requests';
+		$status = 'approve' === $action ? 'approved' : 'rejected';
+		$wpdb->update(
+			$table,
+			['status' => $status, 'resolved_at' => current_time('mysql'), 'updated_at' => current_time('mysql')],
+			['id' => $id],
+			['%s', '%s', '%s'],
+			['%d']
+		);
+		// Send customer notification
+		self::notify_customer($id, $status);
+		wp_safe_redirect(admin_url('admin.php?page=ridefleet-ai-chatbot-changes&updated=1&status_filter=' . $status));
+		exit;
+	}
+
+	private static function notify_customer(int $request_id, string $status): void {
+		// Customer email is not stored — skip silent. Could be extended when email capture is added to the flow.
+		// For now this is a hook for future extension.
+	}
+
 	public static function render(): void {
 		if (!current_user_can('manage_options')) {
 			wp_die(esc_html__('You are not allowed to view change requests.', 'ridefleet-ai-chatbot'));
@@ -44,7 +78,20 @@ final class ChangeRequestsPage {
 		$base_url = admin_url('admin.php?page=ridefleet-ai-chatbot-changes');
 		?>
 		<div class="wrap rfac-admin">
-			<h1><?php esc_html_e('Booking Change Requests', 'ridefleet-ai-chatbot'); ?> <span class="title-count theme-count"><?php echo esc_html(number_format_i18n($total)); ?></span></h1>
+			<div class="rfac-hero">
+				<div>
+					<p class="rfac-kicker"><?php esc_html_e('RideFleet AI Chatbot', 'ridefleet-ai-chatbot'); ?></p>
+					<h1>
+						<?php esc_html_e('Change Requests', 'ridefleet-ai-chatbot'); ?>
+						<?php if ($total > 0): ?><span class="rfac-hero-count"><?php echo esc_html(number_format_i18n($total)); ?></span><?php endif; ?>
+					</h1>
+					<p><?php esc_html_e('Review customer booking modification and fare negotiation requests. Approve, reject, or counteroffer — responses are relayed back through the chatbot.', 'ridefleet-ai-chatbot'); ?></p>
+				</div>
+				<div class="rfac-hero-actions">
+					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot')); ?>" class="button">📊 <?php esc_html_e('Dashboard', 'ridefleet-ai-chatbot'); ?></a>
+					<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-ai-chatbot-settings')); ?>" class="button">⚙️ <?php esc_html_e('Settings', 'ridefleet-ai-chatbot'); ?></a>
+				</div>
+			</div>
 
 			<?php if (!empty($_GET['updated'])) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e('Change request updated.', 'ridefleet-ai-chatbot'); ?></p></div>

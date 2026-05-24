@@ -205,6 +205,7 @@ final class PrivacyPage {
 		$deleted_m = (int) $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}rfac_chat_messages WHERE session_id IN ({$placeholders})", ...$session_ids));
 		$deleted_b = (int) $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}rfac_booking_events WHERE session_id IN ({$placeholders})", ...$session_ids));
 		$deleted_c = (int) $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}rfac_change_requests WHERE session_id IN ({$placeholders})", ...$session_ids));
+		$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}rfac_diagnostic_events WHERE session_id IN ({$placeholders})", ...$session_ids));
 		$deleted_s = (int) $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}rfac_chat_sessions WHERE id IN ({$placeholders})", ...$session_ids));
 
 		Logger::info('privacy', 'Customer data erased via admin', [

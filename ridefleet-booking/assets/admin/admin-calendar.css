@@ -193,7 +193,8 @@
 	font-size: 11px;
 }
 
-.rfb-admin .rfb-calendar-booking.is-pending_payment {
+.rfb-admin .rfb-calendar-booking.is-pending_payment,
+.rfb-admin .rfb-calendar-booking.is-pending_dispatch {
 	background: #fff7df;
 	color: #8a5a00;
 }

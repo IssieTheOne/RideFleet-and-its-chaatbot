@@ -20,16 +20,35 @@ $bookings_table = $wpdb->prefix . 'rfb_bookings';
 $customers_table = $wpdb->prefix . 'rfb_customers';
 $quote_events_table = $wpdb->prefix . 'rfb_quote_events';
 
-$booking_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table}");
-$customer_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$customers_table}");
-$quote_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$quote_events_table}");
-$revenue = (float) $wpdb->get_var("SELECT COALESCE(SUM(total), 0) FROM {$bookings_table} WHERE payment_status IN ('paid', 'partially_paid')");
-$today = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$bookings_table} WHERE DATE(pickup_at) = %s", wp_date('Y-m-d')));
-$upcoming = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table} WHERE pickup_at >= NOW() AND status NOT IN ('cancelled', 'failed', 'refunded')");
-$pending = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table} WHERE status = 'pending_payment'");
-$approval_queue = (int) $wpdb->get_var("SELECT COUNT(DISTINCT b.id) FROM {$bookings_table} b INNER JOIN {$wpdb->prefix}rfb_booking_meta m ON m.booking_id = b.id AND m.meta_key = '_approval_required' AND m.meta_value = '1' WHERE b.status IN ('pending_payment','confirmed')");
-$avg_quote = (float) $wpdb->get_var("SELECT COALESCE(AVG(quoted_total), 0) FROM {$quote_events_table} WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+// Cache aggregate stats for 5 minutes to avoid 10+ queries on every dashboard load.
+$stats_cache_key = 'rfb_dashboard_stats_v2';
+$cached_stats = get_transient($stats_cache_key);
+if (!is_array($cached_stats)) {
+	$cached_stats = [
+		'booking_count'  => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table}"),
+		'customer_count' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$customers_table}"),
+		'quote_count'    => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$quote_events_table}"),
+		'revenue'        => (float) $wpdb->get_var("SELECT COALESCE(SUM(total), 0) FROM {$bookings_table} WHERE payment_status IN ('paid', 'partially_paid')"),
+		'today'          => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$bookings_table} WHERE DATE(pickup_at) = %s", wp_date('Y-m-d'))),
+		'upcoming'       => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table} WHERE pickup_at >= NOW() AND status NOT IN ('cancelled', 'failed', 'refunded')"),
+		'pending'        => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table} WHERE status IN ('pending_payment','pending_dispatch')"),
+		'approval_queue' => (int) $wpdb->get_var("SELECT COUNT(DISTINCT b.id) FROM {$bookings_table} b INNER JOIN {$wpdb->prefix}rfb_booking_meta m ON m.booking_id = b.id AND m.meta_key = '_approval_required' AND m.meta_value = '1' WHERE b.status IN ('pending_payment','confirmed')"),
+		'avg_quote'      => (float) $wpdb->get_var("SELECT COALESCE(AVG(quoted_total), 0) FROM {$quote_events_table} WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"),
+	];
+	set_transient($stats_cache_key, $cached_stats, 5 * MINUTE_IN_SECONDS);
+}
+$booking_count  = $cached_stats['booking_count'];
+$customer_count = $cached_stats['customer_count'];
+$quote_count    = $cached_stats['quote_count'];
+$revenue        = $cached_stats['revenue'];
+$today          = $cached_stats['today'];
+$upcoming       = $cached_stats['upcoming'];
+$pending        = $cached_stats['pending'];
+$approval_queue = $cached_stats['approval_queue'];
+$avg_quote      = $cached_stats['avg_quote'];
 $conversion = $quote_count > 0 ? round(($booking_count / $quote_count) * 100, 1) : 0;
+
+// Recent bookings and top routes are low-cost queries — no caching needed here.
 $recent_bookings = $wpdb->get_results("SELECT * FROM {$bookings_table} ORDER BY created_at DESC LIMIT 6");
 $top_routes = $wpdb->get_results("SELECT pickup_address, dropoff_address, COUNT(*) AS rides, COALESCE(SUM(total), 0) AS revenue FROM {$bookings_table} GROUP BY pickup_address, dropoff_address ORDER BY rides DESC LIMIT 5");
 
@@ -87,6 +106,11 @@ $top_customers = self::get_top_customers();
 </div>
 </div>
 
+<?php
+$airlabs_key  = trim((string) \RideFleetBooking\Support\Options::get('airlabs_api_key', ''));
+$airlabs_iata = strtoupper(trim((string) \RideFleetBooking\Support\Options::get('airlabs_default_iata', '')));
+$show_flights_widget = '' !== $airlabs_key && '' !== $airlabs_iata;
+?>
 <div class="rfb-charts-grid">
 <div class="rfb-panel">
 <h2><?php esc_html_e('Revenue Trend (Last 30 Days)', 'ridefleet-booking'); ?></h2>
@@ -103,22 +127,53 @@ $top_customers = self::get_top_customers();
 <canvas id="rfb-vehicle-chart" height="80"></canvas>
 </div>
 
-<?php
-$airlabs_key  = trim((string) \RideFleetBooking\Support\Options::get('airlabs_api_key', ''));
-$airlabs_iata = strtoupper(trim((string) \RideFleetBooking\Support\Options::get('airlabs_default_iata', '')));
-$show_flights_widget = '' !== $airlabs_key && '' !== $airlabs_iata;
-?>
 <div class="rfb-panel rfb-panel--flights-widget">
 <?php if ($show_flights_widget): ?>
-<h2 style="margin-bottom:10px;">
+<h2>
 	✈ <?php printf(esc_html__('Arrivals — %s', 'ridefleet-booking'), '<strong>' . esc_html($airlabs_iata) . '</strong>'); ?>
-	<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-flights&iata=' . $airlabs_iata)); ?>" style="font-size:12px;font-weight:400;margin-left:8px;color:var(--rfb-accent);"><?php esc_html_e('View all →', 'ridefleet-booking'); ?></a>
+	<a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-flights&iata=' . $airlabs_iata)); ?>"><?php esc_html_e('View all →', 'ridefleet-booking'); ?></a>
 </h2>
 <?php \RideFleetBooking\Admin\FlightTrackerPage::dashboard_widget(); ?>
+<p class="rfb-fids-dash-footer">
+	<?php
+	$_rfb_fetched = \RideFleetBooking\Admin\FlightTrackerPage::$widget_fetched;
+	$_rfb_wiata   = \RideFleetBooking\Admin\FlightTrackerPage::$widget_iata;
+	if ($_rfb_fetched):
+	?>
+	<?php esc_html_e('Last updated:', 'ridefleet-booking'); ?> <span><?php echo esc_html($_rfb_fetched); ?></span>
+	· <a href="<?php echo esc_url(admin_url('admin.php?page=ridefleet-flights&iata=' . $_rfb_wiata)); ?>"><?php esc_html_e('View all', 'ridefleet-booking'); ?></a>
+	&nbsp;·&nbsp;
+	<?php endif; ?>
+	<?php esc_html_e('Refreshing in', 'ridefleet-booking'); ?> <span id="rfb-dash-refresh-countdown">30:00</span>
+	· <a href="<?php echo esc_url(remove_query_arg('rfb_fids_refresh')); ?>"><?php esc_html_e('Refresh now', 'ridefleet-booking'); ?></a>
+</p>
+<script>
+(function(){
+	var ms = 30 * 60 * 1000;
+	var deadline = Date.now() + ms;
+	var el = document.getElementById('rfb-dash-refresh-countdown');
+	if (!el) return;
+	var iv = setInterval(function() {
+		var rem = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+		var m = Math.floor(rem / 60), s = rem % 60;
+		el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+		if (rem === 0) { clearInterval(iv); window.location.reload(); }
+	}, 1000);
+})();
+</script>
 <?php else: ?>
+<h2>✈ <?php esc_html_e('Flight Tracker', 'ridefleet-booking'); ?></h2>
+<p style="padding:16px;color:#94a3b8;font-size:13px;text-align:center;">
+	<?php printf(esc_html__('Configure an Airlabs API key and airport code in %sSettings%s to see live arrivals here.', 'ridefleet-booking'), '<a href="' . esc_url(admin_url('admin.php?page=ridefleet-settings')) . '">', '</a>'); ?>
+</p>
+<?php endif; ?>
+</div>
+</div>
+
+<div class="rfb-charts-grid rfb-charts-grid--span">
+<div class="rfb-panel">
 <h2><?php esc_html_e('Top Customers by Spend', 'ridefleet-booking'); ?></h2>
 <canvas id="rfb-customers-chart" height="80"></canvas>
-<?php endif; ?>
 </div>
 </div>
 
@@ -156,15 +211,6 @@ $show_flights_widget = '' !== $airlabs_key && '' !== $airlabs_iata;
 </div>
 </div>
 </div>
-
-<?php if ($show_flights_widget): ?>
-<div class="rfb-charts-grid" style="grid-template-columns:1fr;">
-<div class="rfb-panel">
-<h2><?php esc_html_e('Top Customers by Spend', 'ridefleet-booking'); ?></h2>
-<canvas id="rfb-customers-chart" height="80"></canvas>
-</div>
-</div>
-<?php endif; ?>
 
 <script>
 (function() {
@@ -269,6 +315,7 @@ $data = $wpdb->get_results(
 
 $colors = [
 'pending_payment' => '#f59e0b',
+'pending_dispatch' => '#0ea5e9',
 'confirmed' => '#3b82f6',
 'completed' => '#10b981',
 'cancelled' => '#ef4444',

@@ -94,10 +94,139 @@
 
 /* Flight widget inside charts grid */
 .rfb-panel--flights-widget {
-	overflow: hidden;
-	padding-bottom: 0;
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
 }
-.rfb-panel--flights-widget h2 {
-	padding-bottom: 10px;
-	border-bottom: 1px solid #f1f5f9;
+.rfb-panel--flights-widget > h2 {
+    padding: 18px 20px 14px;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #17202a;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, rgba(15,118,110,.06), transparent 60%), #fff;
+    flex-shrink: 0;
+}
+.rfb-panel--flights-widget > h2 a {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f766e;
+    text-decoration: none;
+    opacity: .85;
+    transition: opacity .15s;
+}
+.rfb-panel--flights-widget > h2 a:hover { opacity: 1; }
+.rfb-panel--flights-widget .rfb-widget-flights {
+    flex: 1;
+    border-radius: 0;
+    border: none;
+    border-top: none;
+}
+.rfb-panel--flights-widget .rfb-widget-flight {
+    padding: 9px 16px;
+    border-radius: 0;
+}
+.rfb-panel--flights-widget > p:last-child {
+    padding: 6px 16px 10px;
+    margin: 0;
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: right;
+    border-top: 1px solid #f1f5f9;
+}
+
+/* Full-width chart row */
+.rfb-charts-grid--span {
+    grid-template-columns: 1fr !important;
+    margin-top: 0;
+}
+
+/* ── Dashboard flights widget: row table ── */
+.rfb-widget-flights {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.rfb-widget-flight {
+    display: grid;
+    grid-template-columns: 76px 34px 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px;
+    transition: background .1s;
+}
+
+.rfb-widget-flight:last-child {
+    border-bottom: none;
+}
+
+.rfb-widget-flight:hover {
+    background: #f8fafc;
+}
+
+.rfb-widget-flight__time {
+    font-weight: 700;
+    font-size: 13px;
+    color: #17202a;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rfb-widget-flight__info {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.rfb-widget-flight__info strong {
+    color: #17202a;
+    font-weight: 700;
+    margin-right: 4px;
+}
+
+.rfb-widget-flight__info span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.rfb-fids-delay {
+    font-size: 10px;
+    font-weight: 700;
+    color: #b45309;
+    background: #fef3c7;
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
+/* Refresh countdown in dashboard flight panel footer */
+.rfb-fids-dash-footer {
+    padding: 6px 16px 8px;
+    margin: 0;
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: right;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+#rfb-dash-refresh-countdown {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: #64748b;
 }

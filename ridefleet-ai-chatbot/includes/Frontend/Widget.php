@@ -36,6 +36,7 @@ final class Widget {
 			[
 				'endpoint' => esc_url_raw(rest_url('ridefleet-chatbot/v1/message')),
 				'placesEndpoint' => esc_url_raw(rest_url('ridefleet-chatbot/v1/places')),
+				'placeDetailsEndpoint' => esc_url_raw(rest_url('ridefleet-chatbot/v1/place-details')),
 				'nonce' => wp_create_nonce('wp_rest'),
 			]
 		);
@@ -54,6 +55,7 @@ final class Widget {
 		<div class="rfac-widget" style="<?php echo esc_attr($style); ?>" data-rfac-widget
 			data-rfac-endpoint="<?php echo esc_url(rest_url('ridefleet-chatbot/v1/message')); ?>"
 			data-rfac-places-endpoint="<?php echo esc_url(rest_url('ridefleet-chatbot/v1/places')); ?>"
+			data-rfac-place-details-endpoint="<?php echo esc_url(rest_url('ridefleet-chatbot/v1/place-details')); ?>"
 			data-rfac-nonce="<?php echo esc_attr(wp_create_nonce('wp_rest')); ?>">
 
 			<button class="rfac-bubble" type="button" aria-label="<?php esc_attr_e('Open taxi booking chat', 'ridefleet-ai-chatbot'); ?>">
@@ -68,13 +70,9 @@ final class Widget {
 				<header class="rfac-header">
 					<div class="rfac-header-info">
 						<div class="rfac-avatar" aria-hidden="true">
-							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-								<path d="M3.375 4.5C2.339 4.5 1.5 5.34 1.5 6.375V13.5h12V6.375c0-1.036-.84-1.875-1.875-1.875h-8.25ZM13.5 15h-12v2.625c0 1.035.84 1.875 1.875 1.875h.375a3 3 0 1 1 6 0h3a.75.75 0 0 0 .75-.75V15Z" />
-								<path d="M8.25 19.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0ZM15.75 6.75a.75.75 0 0 0-.75.75v11.25c0 .087.015.17.042.248a3 3 0 0 1 5.958.464c.853-.175 1.522-.935 1.464-1.883a18.659 18.659 0 0 0-3.732-10.104 1.837 1.837 0 0 0-1.47-.725H15.75Z" />
-								<path d="M19.5 19.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z" />
-							</svg>
+							<span class="rfac-avatar-emoji">🚕</span>
 						</div>
-						<div>
+						<div class="rfac-header-copy">
 							<strong id="rfac-dialog-title"><?php esc_html_e('RideFleet Booking', 'ridefleet-ai-chatbot'); ?></strong>
 							<span><?php esc_html_e('Taxi reservations', 'ridefleet-ai-chatbot'); ?> <i class="rfac-online-dot" aria-hidden="true"></i></span>
 						</div>
@@ -96,6 +94,12 @@ final class Widget {
 					<span class="rfac-progress-step"><i></i><b><?php esc_html_e('Done', 'ridefleet-ai-chatbot'); ?></b></span>
 				</div>
 
+				<div class="rfac-trust-row" aria-label="<?php esc_attr_e('Booking assistant features', 'ridefleet-ai-chatbot'); ?>">
+					<span><?php esc_html_e('Live fare check', 'ridefleet-ai-chatbot'); ?></span>
+					<span><?php esc_html_e('Dispatch reviewed', 'ridefleet-ai-chatbot'); ?></span>
+					<span><?php esc_html_e('No account needed', 'ridefleet-ai-chatbot'); ?></span>
+				</div>
+
 				<div class="rfac-messages" data-rfac-messages role="log" aria-live="polite" aria-relevant="additions text" data-rfac-default-greeting="<?php esc_attr_e('Hi! I can book your taxi ride. Where should we pick you up? Start typing your address and I will suggest matches.', 'ridefleet-ai-chatbot'); ?>">
 					<div class="rfac-message rfac-message-bot"><?php esc_html_e('Hi! I can book your taxi ride. Where should we pick you up? Start typing your address and I will suggest matches.', 'ridefleet-ai-chatbot'); ?></div>
 				</div>
@@ -106,14 +110,6 @@ final class Widget {
 				</div>
 
 				<form class="rfac-form" data-rfac-form>
-					<select class="rfac-phone-prefix" data-rfac-phone-prefix hidden aria-label="<?php esc_attr_e('Country code', 'ridefleet-ai-chatbot'); ?>">
-						<option value="+32">BE +32</option>
-						<option value="+31">NL +31</option>
-						<option value="+33">FR +33</option>
-						<option value="+49">DE +49</option>
-						<option value="+44">UK +44</option>
-						<option value="+1">US +1</option>
-					</select>
 					<input type="text" data-rfac-input placeholder="<?php esc_attr_e('Type your message...', 'ridefleet-ai-chatbot'); ?>" autocomplete="off">
 					<button type="submit" aria-label="<?php esc_attr_e('Send message', 'ridefleet-ai-chatbot'); ?>">
 						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
@@ -121,6 +117,7 @@ final class Widget {
 						</svg>
 					</button>
 				</form>
+				<div class="rfac-footer-note"><?php esc_html_e('Use exact addresses or select suggestions for the fastest booking.', 'ridefleet-ai-chatbot'); ?></div>
 			</section>
 		</div>
 		<?php

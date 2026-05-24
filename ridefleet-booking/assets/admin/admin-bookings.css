@@ -125,6 +125,7 @@
 }
 
 .rfb-booking-hero-badges .rfb-badge-pending_payment,
+.rfb-booking-hero-badges .rfb-badge-pending_dispatch,
 .rfb-booking-hero-badges .rfb-badge-pending,
 .rfb-booking-hero-badges .rfb-badge-unpaid,
 .rfb-booking-hero-badges .rfb-badge-partially_paid {
@@ -898,4 +899,110 @@ button.rfb-card-footer-btn:hover {
 	.rfb-route-builder {
 		grid-template-columns: 1fr;
 	}
+}
+
+/* ── Customer search typeahead ── */
+.rfb-customer-search-wrap {
+	position: relative;
+	margin-bottom: 12px;
+}
+
+.rfb-customer-search-input {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1.5px solid #e2e8f0;
+	border-radius: 8px;
+	font-size: 13px;
+	transition: border-color .15s;
+}
+
+.rfb-customer-search-input:focus {
+	outline: none;
+	border-color: var(--rfb-accent);
+	box-shadow: 0 0 0 3px rgba(15,118,110,.12);
+}
+
+.rfb-customer-search-dropdown {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	background: #fff;
+	border: 1.5px solid #e2e8f0;
+	border-radius: 10px;
+	box-shadow: 0 8px 24px rgba(0,0,0,.1);
+	list-style: none;
+	margin: 0;
+	padding: 4px;
+	z-index: 9999;
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+.rfb-customer-search-item {
+	padding: 10px 12px;
+	border-radius: 7px;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	transition: background .1s;
+}
+
+.rfb-customer-search-item:hover {
+	background: #f0fdfa;
+}
+
+.rfb-customer-search-item strong {
+	font-size: 13px;
+	color: #1e293b;
+}
+
+.rfb-customer-search-item span {
+	font-size: 11px;
+	color: #94a3b8;
+}
+
+.rfb-customer-search-empty {
+	padding: 12px;
+	text-align: center;
+	font-size: 13px;
+	color: #94a3b8;
+	font-style: italic;
+}
+
+/* ── Live price preview box ── */
+.rfb-price-preview {
+	margin: 12px 0 0;
+	background: linear-gradient(135deg, #f0fdfa, #ecfdf5);
+	border: 1.5px solid #99f6e4;
+	border-radius: 12px;
+	padding: 16px 20px;
+	text-align: center;
+	animation: rfb-fade-in .25s ease;
+}
+
+.rfb-price-preview-amount {
+	font-size: 28px;
+	font-weight: 800;
+	color: #0f766e;
+	letter-spacing: -.5px;
+}
+
+.rfb-price-preview-label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+	color: #0d9488;
+	margin-top: 4px;
+}
+
+.rfb-price-preview--ready .rfb-price-preview-amount {
+	color: #065f46;
+}
+
+@keyframes rfb-fade-in {
+	from { opacity: 0; transform: translateY(4px); }
+	to   { opacity: 1; transform: translateY(0); }
 }

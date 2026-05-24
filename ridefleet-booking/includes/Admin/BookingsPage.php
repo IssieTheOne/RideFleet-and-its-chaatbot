@@ -159,7 +159,7 @@ final class BookingsPage {
 			<div class="rfb-stat-grid">
 				<?php DashboardPage::stat(__('Total Bookings', 'ridefleet-booking'), number_format_i18n($total_all), __('All reservations across all statuses.', 'ridefleet-booking')); ?>
 				<?php DashboardPage::stat(__('Confirmed', 'ridefleet-booking'), number_format_i18n($status_counts['confirmed'] ?? 0), __('Rides confirmed and ready for dispatch.', 'ridefleet-booking')); ?>
-				<?php DashboardPage::stat(__('Pending', 'ridefleet-booking'), number_format_i18n($status_counts['pending_payment'] ?? 0), __('Awaiting payment confirmation.', 'ridefleet-booking')); ?>
+				<?php DashboardPage::stat(__('Pending', 'ridefleet-booking'), number_format_i18n(($status_counts['pending_payment'] ?? 0) + ($status_counts['pending_dispatch'] ?? 0)), __('Awaiting payment or dispatch confirmation.', 'ridefleet-booking')); ?>
 				<?php DashboardPage::stat(__('Completed', 'ridefleet-booking'), number_format_i18n($status_counts['completed'] ?? 0), __('Successfully finished rides.', 'ridefleet-booking')); ?>
 			</div>
 						<form method="get" class="rfb-panel rfb-filter-bar rfb-filter-bar-labeled">
@@ -168,7 +168,7 @@ final class BookingsPage {
 					<span><?php esc_html_e('Status', 'ridefleet-booking'); ?></span>
 					<select name="status">
 						<option value=""><?php esc_html_e('All statuses', 'ridefleet-booking'); ?></option>
-						<?php foreach (['pending_payment', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'] as $status) : ?>
+						<?php foreach (['pending_payment', 'pending_dispatch', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'] as $status) : ?>
 						<option value="<?php echo esc_attr($status); ?>" <?php selected($_GET['status'] ?? '', $status); ?>><?php echo esc_html(ucwords(str_replace('_', ' ', $status))); ?></option>
 						<?php endforeach; ?>
 					</select>
@@ -268,6 +268,17 @@ final class BookingsPage {
 					<section class="rfb-manual-step">
 						<p class="rfb-step-kicker"><?php esc_html_e('Step 3', 'ridefleet-booking'); ?></p>
 						<h2><?php esc_html_e('Customer', 'ridefleet-booking'); ?></h2>
+						<!-- Customer search typeahead -->
+						<div class="rfb-customer-search-wrap" data-rfb-customer-search>
+							<label>
+								<span><?php esc_html_e('Search existing customer', 'ridefleet-booking'); ?></span>
+								<input type="search" placeholder="<?php esc_attr_e('Type name, email or phone…', 'ridefleet-booking'); ?>" autocomplete="off" class="rfb-customer-search-input">
+							</label>
+							<ul class="rfb-customer-search-dropdown" hidden></ul>
+							<p class="rfb-customer-search-hint" style="margin:4px 0 12px;font-size:12px;color:#94a3b8;">
+								<?php esc_html_e('Select a customer to pre-fill the fields below, or enter a new one manually.', 'ridefleet-booking'); ?>
+							</p>
+						</div>
 						<label><span><?php esc_html_e('First name', 'ridefleet-booking'); ?></span><input type="text" name="customerFirstName" required></label>
 						<label><span><?php esc_html_e('Last name', 'ridefleet-booking'); ?></span><input type="text" name="customerLastName" required></label>
 						<label><span><?php esc_html_e('Email', 'ridefleet-booking'); ?></span><input type="email" name="customerEmail"></label>
@@ -280,7 +291,15 @@ final class BookingsPage {
 						<label><span><?php esc_html_e('Minutes', 'ridefleet-booking'); ?></span><input type="number" name="durationMinutes" min="0" step="1" required></label>
 						<label><span><?php esc_html_e('Passengers', 'ridefleet-booking'); ?></span><input type="number" name="passengers" min="1" value="1"></label>
 						<label><span><?php esc_html_e('Luggage', 'ridefleet-booking'); ?></span><input type="number" name="luggage" min="0" value="0"></label>
-						<div class="rfb-route-preview"><div class="rfb-admin-map" data-rfb-route-map></div><p><?php esc_html_e('Google will fill distance and minutes. Core flat-rate rules are checked when you create the booking and override the meter estimate.', 'ridefleet-booking'); ?></p></div>
+						<div class="rfb-route-preview">
+							<div class="rfb-admin-map" data-rfb-route-map></div>
+							<!-- Live flat-rate preview -->
+							<div class="rfb-price-preview" data-rfb-price-preview hidden>
+								<div class="rfb-price-preview-amount" data-rfb-price-amount>—</div>
+								<div class="rfb-price-preview-label" data-rfb-price-label><?php esc_html_e('Estimated price', 'ridefleet-booking'); ?></div>
+							</div>
+							<p style="margin-top:8px;"><?php esc_html_e('Google fills distance & minutes automatically. Price preview shows once both addresses are set. Core flat-rate rules always apply on submit.', 'ridefleet-booking'); ?></p>
+						</div>
 					</section>
 					<section class="rfb-manual-step">
 						<p class="rfb-step-kicker"><?php esc_html_e('Step 4', 'ridefleet-booking'); ?></p>
@@ -383,7 +402,7 @@ final class BookingsPage {
 				</div>
 			</div>
 			<div class="rfb-workflow">
-				<div class="<?php echo esc_attr(in_array($booking->status, ['pending_payment', 'confirmed', 'completed'], true) ? 'is-active' : ''); ?>">
+				<div class="<?php echo esc_attr(in_array($booking->status, ['pending_payment', 'pending_dispatch', 'confirmed', 'completed'], true) ? 'is-active' : ''); ?>">
 					<strong>1</strong><span><?php esc_html_e('Request received', 'ridefleet-booking'); ?></span>
 				</div>
 				<div class="<?php echo esc_attr(in_array($booking->status, ['confirmed', 'completed'], true) ? 'is-active' : ''); ?>">
@@ -428,7 +447,7 @@ final class BookingsPage {
 						<input type="hidden" name="booking_id" value="<?php echo esc_attr((string) $booking->id); ?>">
 						<div class="rfb-dispatch-fields">
 							<label><span><?php esc_html_e('Booking Status', 'ridefleet-booking'); ?></span><select name="status">
-								<?php foreach (['pending_payment', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'] as $status) : ?>
+								<?php foreach (['pending_payment', 'pending_dispatch', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'] as $status) : ?>
 									<option value="<?php echo esc_attr($status); ?>" <?php selected($booking->status, $status); ?>><?php echo esc_html(ucwords(str_replace('_', ' ', $status))); ?></option>
 								<?php endforeach; ?>
 							</select></label>
@@ -635,6 +654,83 @@ final class BookingsPage {
 			'label' => '#' . $fallback_id,
 			'message' => sanitize_textarea_field($raw),
 		];
+	}
+
+	// ── AJAX handlers ────────────────────────────────────────────────────────
+
+	public static function customer_search_ajax(): void {
+		check_ajax_referer('rfb_admin_ajax', 'nonce');
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error('Forbidden', 403);
+		}
+		global $wpdb;
+		$q = sanitize_text_field(wp_unslash($_GET['q'] ?? ''));
+		if (strlen($q) < 2) {
+			wp_send_json_success([]);
+		}
+		$like = '%' . $wpdb->esc_like($q) . '%';
+		$rows = $wpdb->get_results($wpdb->prepare(
+			"SELECT id, first_name, last_name, email, phone FROM {$wpdb->prefix}rfb_customers
+			 WHERE (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s)
+			 ORDER BY id DESC LIMIT 10",
+			$like, $like, $like, $like
+		));
+		$results = [];
+		foreach ((array) $rows as $row) {
+			$results[] = [
+				'id'         => (int) $row->id,
+				'label'      => trim($row->first_name . ' ' . $row->last_name),
+				'email'      => (string) $row->email,
+				'phone'      => (string) $row->phone,
+				'first_name' => (string) $row->first_name,
+				'last_name'  => (string) $row->last_name,
+			];
+		}
+		wp_send_json_success($results);
+	}
+
+	public static function quote_preview_ajax(): void {
+		check_ajax_referer('rfb_admin_ajax', 'nonce');
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error('Forbidden', 403);
+		}
+		$pickup    = sanitize_textarea_field(wp_unslash($_POST['pickup'] ?? ''));
+		$dropoff   = sanitize_textarea_field(wp_unslash($_POST['dropoff'] ?? ''));
+		$distance  = max(0, (float) ($_POST['distance'] ?? 0));
+		$duration  = max(0, (float) ($_POST['duration'] ?? 0));
+		$pickup_at = sanitize_text_field(wp_unslash($_POST['pickup_at'] ?? ''));
+
+		if ('' === $pickup || '' === $dropoff) {
+			wp_send_json_error('Missing addresses');
+		}
+
+		// Try core flat-rate rules first (route-based pricing)
+		$core = \RideFleetBooking\Booking\CoreBookingPricingEngine::quote_from_request([
+			'pickup_address'  => $pickup,
+			'dropoff_address' => $dropoff,
+		]);
+
+		if (!empty($core['success']) && isset($core['final_price'])) {
+			wp_send_json_success([
+				'price'          => (float) $core['final_price'],
+				'currency'       => (string) \RideFleetBooking\Support\Options::get('currency', 'USD'),
+				'pricing_source' => (string) ($core['pricing_source'] ?? 'flat_rate'),
+				'zone_name'      => (string) ($core['zone_name'] ?? ''),
+			]);
+		}
+
+		// Fallback: distance-based meter estimate
+		if ($distance > 0) {
+			$quote = \RideFleetBooking\Booking\QuoteCalculator::calculate($distance, $duration, [], 0, '', $pickup_at, 0);
+			wp_send_json_success([
+				'price'          => (float) ($quote['total'] ?? 0),
+				'currency'       => (string) \RideFleetBooking\Support\Options::get('currency', 'USD'),
+				'pricing_source' => 'meter',
+				'zone_name'      => '',
+			]);
+		}
+
+		wp_send_json_error('Could not calculate price. Fill in distance first.');
 	}
 
 	private static function pagination(int $total_items, int $per_page, int $page_num): void {

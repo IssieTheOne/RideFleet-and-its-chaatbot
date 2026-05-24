@@ -21,6 +21,15 @@ final class BookingRepository {
 		$booking_number = self::next_booking_number();
 		$now = current_time('mysql');
 		$table = $wpdb->prefix . 'rfb_bookings';
+		$allowed_statuses = ['pending_payment', 'pending_dispatch', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'];
+		$status = sanitize_key((string) ($payload['status'] ?? 'pending_payment'));
+		if (!in_array($status, $allowed_statuses, true)) {
+			$status = 'pending_payment';
+		}
+		$payment_status = sanitize_key((string) ($payload['paymentStatus'] ?? 'unpaid'));
+		if ('' === $payment_status) {
+			$payment_status = 'unpaid';
+		}
 
 		$wpdb->insert(
 			$table,
@@ -28,8 +37,8 @@ final class BookingRepository {
 				'booking_number' => $booking_number,
 				'customer_id' => $customer_id,
 				'wp_user_id' => get_current_user_id() ?: null,
-				'status' => 'pending_payment',
-				'payment_status' => 'unpaid',
+				'status' => $status,
+				'payment_status' => $payment_status,
 				'service_type' => sanitize_text_field($payload['serviceType'] ?? 'distance'),
 				'transfer_type' => sanitize_text_field($payload['transferType'] ?? 'one_way'),
 				'pickup_address' => sanitize_textarea_field($payload['pickupAddress'] ?? ''),
@@ -64,18 +73,38 @@ final class BookingRepository {
 			CouponService::mark_used((string) $payload['couponCode']);
 		}
 		self::update_customer_totals($customer_id);
+		delete_transient('rfb_dashboard_stats_v2'); // bust cached counts
+
+		// Fire dispatcher + customer notification for every booking source (admin form, chatbot, REST).
+		NotificationService::booking_created($booking_id);
 
 		return [
 			'id' => $booking_id,
 			'bookingNumber' => $booking_number,
-			'status' => 'pending_payment',
-			'paymentStatus' => 'unpaid',
+			'status' => $status,
+			'paymentStatus' => $payment_status,
 		];
 	}
 
 	public static function find(int $booking_id): ?object {
 		global $wpdb;
 		$booking = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}rfb_bookings WHERE id = %d", $booking_id));
+
+		return $booking ?: null;
+	}
+
+	/**
+	 * Finds a booking by its human-readable booking number (e.g. "RFB-0042").
+	 * Used by the chatbot cancellation flow where users supply their booking reference.
+	 */
+	public static function find_by_booking_number(string $number): ?object {
+		global $wpdb;
+		$booking = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}rfb_bookings WHERE booking_number = %s LIMIT 1",
+				strtoupper(sanitize_text_field($number))
+			)
+		);
 
 		return $booking ?: null;
 	}
@@ -98,6 +127,7 @@ final class BookingRepository {
 		}
 
 		$wpdb->update($wpdb->prefix . 'rfb_bookings', $data, ['id' => $booking_id], $format, ['%d']);
+		delete_transient('rfb_dashboard_stats_v2'); // bust cached counts
 	}
 
 	public static function attach_order(int $booking_id, int $order_id): void {

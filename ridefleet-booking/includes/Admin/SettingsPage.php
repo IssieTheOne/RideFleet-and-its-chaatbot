@@ -36,7 +36,7 @@ final class SettingsPage {
 		}
 
 		$sanitized = [
-			'currency' => sanitize_text_field($input['currency'] ?? 'USD'),
+			'currency' => in_array(($input['currency'] ?? 'USD'), ['USD','EUR','GBP','CAD','AUD','CHF','JPY','SEK','NOK','DKK','NZD','MXN','BRL','ZAR','HKD','SGD','AED','SAR','INR','CNY','KRW','TRY','PLN','CZK','HUF','RON'], true) ? $input['currency'] : 'USD',
 			'distance_unit' => in_array(($input['distance_unit'] ?? 'km'), ['km', 'mi'], true) ? $input['distance_unit'] : 'km',
 			'google_maps_api_key' => sanitize_text_field($input['google_maps_api_key'] ?? ''),
 			'google_maps_map_id' => sanitize_text_field($input['google_maps_map_id'] ?? ''),
@@ -44,8 +44,13 @@ final class SettingsPage {
 			'dispatcher_api_enabled' => !empty($input['dispatcher_api_enabled']) ? 'yes' : 'no',
 			'dispatcher_api_key' => $dispatcher_api_key,
 			'enable_extras' => !empty($input['enable_extras']) ? 'yes' : 'no',
-			'admin_email' => sanitize_email($input['admin_email'] ?? get_option('admin_email')),
-			'review_link' => esc_url_raw($input['review_link'] ?? ''),
+			'admin_email'    => sanitize_email($input['admin_email'] ?? get_option('admin_email')),
+			'company_name'                => sanitize_text_field($input['company_name'] ?? get_bloginfo('name')),
+			'company_phone'               => sanitize_text_field($input['company_phone'] ?? ''),
+			'company_address'             => sanitize_text_field($input['company_address'] ?? ''),
+			'review_link'                 => esc_url_raw($input['review_link'] ?? ''),
+			'cancellation_policy_enabled' => !empty($input['cancellation_policy_enabled']) ? 'yes' : 'no',
+			'cancellation_hours'          => max(1, absint($input['cancellation_hours'] ?? 24)),
 			'airlabs_api_key' => sanitize_text_field($input['airlabs_api_key'] ?? ''),
 			'airlabs_default_iata' => strtoupper(substr(sanitize_text_field($input['airlabs_default_iata'] ?? ''), 0, 4)),
 			'email_templates' => [
@@ -156,7 +161,18 @@ final class SettingsPage {
 						</div>
 						<div class="rfb-settings-section-divider"><span><?php esc_html_e('Business defaults', 'ridefleet-booking'); ?></span></div>
 						<div class="rfb-field-grid">
-							<?php self::text('currency', __('Currency code', 'ridefleet-booking'), $options['currency'] ?? 'USD', 'USD'); ?>
+							<label>
+							<span><?php esc_html_e('Currency', 'ridefleet-booking'); ?></span>
+							<?php
+							$currencies = ['USD'=>'USD — US Dollar','EUR'=>'EUR — Euro','GBP'=>'GBP — British Pound','CAD'=>'CAD — Canadian Dollar','AUD'=>'AUD — Australian Dollar','CHF'=>'CHF — Swiss Franc','JPY'=>'JPY — Japanese Yen','SEK'=>'SEK — Swedish Krona','NOK'=>'NOK — Norwegian Krone','DKK'=>'DKK — Danish Krone','NZD'=>'NZD — New Zealand Dollar','MXN'=>'MXN — Mexican Peso','BRL'=>'BRL — Brazilian Real','ZAR'=>'ZAR — South African Rand','HKD'=>'HKD — Hong Kong Dollar','SGD'=>'SGD — Singapore Dollar','AED'=>'AED — UAE Dirham','SAR'=>'SAR — Saudi Riyal','INR'=>'INR — Indian Rupee','CNY'=>'CNY — Chinese Yuan','KRW'=>'KRW — South Korean Won','TRY'=>'TRY — Turkish Lira','PLN'=>'PLN — Polish Złoty','CZK'=>'CZK — Czech Koruna','HUF'=>'HUF — Hungarian Forint','RON'=>'RON — Romanian Leu'];
+							$cur = (string)($options['currency'] ?? 'USD');
+							?>
+							<select name="rfb_settings[currency]">
+								<?php foreach ($currencies as $code => $label): ?>
+									<option value="<?php echo esc_attr($code); ?>" <?php selected($cur, $code); ?>><?php echo esc_html($label); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</label>
 							<label>
 								<span><?php esc_html_e('Distance unit', 'ridefleet-booking'); ?></span>
 								<select name="rfb_settings[distance_unit]">
@@ -288,10 +304,13 @@ final class SettingsPage {
 						</div>
 
 						<div class="rfb-settings-subsection">
-							<p class="rfb-settings-subsection-head"><?php esc_html_e('Routing', 'ridefleet-booking'); ?></p>
+							<p class="rfb-settings-subsection-head"><?php esc_html_e('Company & Routing', 'ridefleet-booking'); ?></p>
 							<div class="rfb-field-grid">
+								<?php self::text('company_name', __('Company name', 'ridefleet-booking'), $options['company_name'] ?? get_bloginfo('name'), get_bloginfo('name')); ?>
+								<?php self::text('company_phone', __('Company phone', 'ridefleet-booking'), $options['company_phone'] ?? '', '+1 (800) 555-0100'); ?>
 								<?php self::text('admin_email', __('Notification email', 'ridefleet-booking'), $options['admin_email'] ?? get_option('admin_email'), 'dispatch@example.com'); ?>
 								<?php self::text('review_link', __('Google Review link', 'ridefleet-booking'), $options['review_link'] ?? '', 'https://g.page/r/...'); ?>
+								<?php self::text('company_address', __('Company address', 'ridefleet-booking'), $options['company_address'] ?? '', '123 Main St, City, Country'); ?>
 							</div>
 						</div>
 
@@ -337,10 +356,11 @@ final class SettingsPage {
 
 						<div class="rfb-settings-token-row">
 							<span class="rfb-eyebrow"><?php esc_html_e('Available tokens', 'ridefleet-booking'); ?></span>
-							<?php foreach (['{booking_number}', '{pickup_address}', '{dropoff_address}', '{currency}', '{total}'] as $token) : ?>
+							<?php foreach (['{booking_number}', '{customer_name}', '{pickup_address}', '{dropoff_address}', '{pickup_date}', '{pickup_time}', '{extras}', '{total}', '{currency}', '{route_url}', '{review_link}', '{company_name}', '{company_phone}', '{company_email}'] as $token) : ?>
 								<code><?php echo esc_html($token); ?></code>
 							<?php endforeach; ?>
 						</div>
+						<p style="font-size:12px;color:#94a3b8;margin:8px 0 0;"><?php esc_html_e('Leave the body blank to use the built-in responsive HTML template.', 'ridefleet-booking'); ?></p>
 						<div class="rfb-settings-inline-actions" style="margin-top:14px">
 							<a class="button" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=rfb_send_test_email'), 'rfb_send_test_email')); ?>">
 								<span class="dashicons dashicons-email-alt" style="margin-right:4px;margin-top:3px"></span>
@@ -370,11 +390,130 @@ final class SettingsPage {
 						</label>
 					</section>
 
+					<?php
+					$cancel_page_id  = absint($options['cancellation_page_id'] ?? 0);
+					$cancel_post     = $cancel_page_id ? get_post($cancel_page_id) : null;
+					$cancel_page_url = ($cancel_post && 'publish' === $cancel_post->post_status) ? get_permalink($cancel_page_id) : '';
+					$cancel_edit_url = $cancel_page_id ? get_edit_post_link($cancel_page_id, 'raw') : '';
+					$cancel_enabled  = 'yes' === ($options['cancellation_policy_enabled'] ?? 'no');
+					?>
+					<section class="rfb-panel rfb-settings-section">
+						<div class="rfb-settings-section-head">
+							<span class="rfb-settings-section-icon dashicons dashicons-lock"></span>
+							<div>
+								<h2><?php esc_html_e('Cancellation Policy', 'ridefleet-booking'); ?></h2>
+								<p><?php esc_html_e('Configure cancellation terms and generate the customer-facing policy page. When enabled, a link is shown in the chatbot after booking.', 'ridefleet-booking'); ?></p>
+							</div>
+							<span class="rfb-badge <?php echo esc_attr($cancel_enabled ? 'rfb-badge-confirmed' : 'rfb-badge-pending'); ?>" style="margin-left:auto">
+								<?php echo esc_html($cancel_enabled ? __('Enabled', 'ridefleet-booking') : __('Disabled', 'ridefleet-booking')); ?>
+							</span>
+						</div>
+
+						<label class="rfb-checkbox" style="margin-bottom:16px">
+							<input type="checkbox" name="rfb_settings[cancellation_policy_enabled]" value="1" <?php checked($cancel_enabled); ?>>
+							<span><?php esc_html_e('Enable cancellation policy (chatbot shows the policy link after booking confirmation)', 'ridefleet-booking'); ?></span>
+						</label>
+
+						<div class="rfb-settings-subsection">
+							<p class="rfb-settings-subsection-head"><?php esc_html_e('Policy Terms', 'ridefleet-booking'); ?></p>
+							<div class="rfb-field-grid">
+								<label>
+									<span><?php esc_html_e('Free cancellation window (hours)', 'ridefleet-booking'); ?></span>
+									<input type="number" min="1" max="168" name="rfb_settings[cancellation_hours]" value="<?php echo esc_attr($options['cancellation_hours'] ?? 24); ?>">
+									<small><?php esc_html_e('Customers may cancel free of charge up to this many hours before their pickup.', 'ridefleet-booking'); ?></small>
+								</label>
+							</div>
+							<p class="rfb-settings-api-note" style="margin-top:8px"><?php esc_html_e('Company name, phone, email and address are taken from the Company & Routing section above. Save settings first, then regenerate the page below to apply changes.', 'ridefleet-booking'); ?></p>
+						</div>
+
+						<div class="rfb-settings-subsection">
+							<p class="rfb-settings-subsection-head"><?php esc_html_e('Policy Page', 'ridefleet-booking'); ?></p>
+							<p style="margin-bottom:12px;color:#64748b;font-size:13px"><?php esc_html_e('Generates a pre-written legal page with your company details and the cancellation hours above. The chatbot will link to it automatically when enabled.', 'ridefleet-booking'); ?></p>
+
+							<div id="rfb-cancellation-page-status" style="margin-bottom:14px">
+								<?php if ($cancel_page_url) : ?>
+									<div class="rfb-settings-checklist">
+										<div class="is-ok">
+											<span class="dashicons dashicons-yes-alt"></span>
+											<?php esc_html_e('Policy page is live.', 'ridefleet-booking'); ?>
+											<a href="<?php echo esc_url($cancel_page_url); ?>" target="_blank" rel="noopener" style="margin-left:6px"><?php esc_html_e('View', 'ridefleet-booking'); ?></a>
+											<?php if ($cancel_edit_url) : ?>
+												&nbsp;·&nbsp;
+												<a href="<?php echo esc_url($cancel_edit_url); ?>" target="_blank" rel="noopener"><?php esc_html_e('Edit in WordPress', 'ridefleet-booking'); ?></a>
+											<?php endif; ?>
+										</div>
+									</div>
+								<?php else : ?>
+									<div class="rfb-settings-checklist">
+										<div class="is-info">
+											<span class="dashicons dashicons-info-outline"></span>
+											<?php esc_html_e('No cancellation policy page created yet. Click the button below to generate one.', 'ridefleet-booking'); ?>
+										</div>
+									</div>
+								<?php endif; ?>
+							</div>
+
+							<div class="rfb-settings-inline-actions">
+								<button type="button" id="rfb-create-cancellation-page" class="button button-primary"
+									data-nonce="<?php echo esc_attr(wp_create_nonce('rfb_admin_ajax')); ?>"
+									data-ajax-url="<?php echo esc_attr(admin_url('admin-ajax.php')); ?>">
+									<span class="dashicons dashicons-lock" style="margin-right:4px;margin-top:3px"></span>
+									<?php echo $cancel_page_url ? esc_html__('Regenerate Policy Page', 'ridefleet-booking') : esc_html__('Create Policy Page', 'ridefleet-booking'); ?>
+								</button>
+								<span class="rfb-settings-test-email-hint" id="rfb-cancellation-page-msg"></span>
+							</div>
+						</div>
+					</section>
+
 				</div>
 				<div class="rfb-settings-save-row">
 					<?php submit_button(__('Save Settings', 'ridefleet-booking'), 'primary large', 'submit', false); ?>
 				</div>
 			</form>
+			<script>
+			(function () {
+				var btn = document.getElementById('rfb-create-cancellation-page');
+				if (!btn) { return; }
+				btn.addEventListener('click', function () {
+					btn.disabled = true;
+					var msgEl = document.getElementById('rfb-cancellation-page-msg');
+					msgEl.style.color = '';
+					msgEl.textContent = '<?php echo esc_js(__('Creating page…', 'ridefleet-booking')); ?>';
+					var fd = new FormData();
+					fd.append('action', 'rfb_create_cancellation_page');
+					fd.append('nonce', btn.dataset.nonce);
+					fetch(btn.dataset.ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+						.then(function (r) { return r.json(); })
+						.then(function (res) {
+							btn.disabled = false;
+							if (res.success) {
+								msgEl.style.color = '#16a34a';
+								msgEl.textContent = res.data.message || '<?php echo esc_js(__('Done.', 'ridefleet-booking')); ?>';
+								var statusDiv = document.getElementById('rfb-cancellation-page-status');
+								if (statusDiv) {
+									statusDiv.innerHTML =
+										'<div class="rfb-settings-checklist"><div class="is-ok">' +
+										'<span class="dashicons dashicons-yes-alt"></span> ' +
+										'<?php echo esc_js(__('Policy page is live.', 'ridefleet-booking')); ?> ' +
+										'<a href="' + res.data.page_url + '" target="_blank" rel="noopener" style="margin-left:6px"><?php echo esc_js(__('View', 'ridefleet-booking')); ?></a>' +
+										' &nbsp;·&nbsp; ' +
+										'<a href="' + res.data.edit_url + '" target="_blank" rel="noopener"><?php echo esc_js(__('Edit in WordPress', 'ridefleet-booking')); ?></a>' +
+										'</div></div>';
+								}
+								btn.innerHTML = '<span class="dashicons dashicons-lock" style="margin-right:4px;margin-top:3px"></span> <?php echo esc_js(__('Regenerate Policy Page', 'ridefleet-booking')); ?>';
+							} else {
+								msgEl.style.color = '#dc2626';
+								msgEl.textContent = (res.data && res.data.message) ? res.data.message : '<?php echo esc_js(__('Error creating page.', 'ridefleet-booking')); ?>';
+							}
+						})
+						.catch(function () {
+							btn.disabled = false;
+							msgEl.style.color = '#dc2626';
+							msgEl.textContent = '<?php echo esc_js(__('Network error — please try again.', 'ridefleet-booking')); ?>';
+						});
+				});
+			}());
+			</script>
 		</div>
 		<?php
 	}

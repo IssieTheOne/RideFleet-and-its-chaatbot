@@ -55,6 +55,7 @@
 				vehicles: [],
 				extras: [],
 				selectedVehicleId: 0,
+				manualDispatch: false,
 				selectedExtras: new Map(),
 				serviceAreaMap: null,
 				placeCoords: {},
@@ -473,13 +474,15 @@
 			}
 
 			if (!this.state.vehicles.length) {
-				this.vehiclesEl.hidden = false;
-				this.vehiclesEl.innerHTML = '<div class="rfb-auto-vehicle rfb-auto-vehicle-empty"><strong>No matching vehicle</strong><small>Please lower the passenger/luggage count or contact dispatch for a custom arrangement.</small></div>';
+				this.state.manualDispatch = true;
 				this.state.selectedVehicleId = 0;
+				this.vehiclesEl.hidden = false;
+				this.vehiclesEl.innerHTML = '<div class="rfb-auto-vehicle rfb-auto-vehicle-dispatch"><strong>Dispatch will assign a vehicle</strong><small>No standard vehicle matches this count — our dispatch team will select the right vehicle for your trip and may adjust the final fare.</small></div>';
 				return;
 			}
 
 			const vehicle = this.state.vehicles[0];
+			this.state.manualDispatch = false;
 			this.state.selectedVehicleId = Number(vehicle.id);
 			this.vehiclesEl.hidden = true;
 			this.vehiclesEl.innerHTML = '';
@@ -570,9 +573,11 @@
 					return;
 				}
 
+				const fieldPlaceholder = field.getAttribute('placeholder') || 'Location';
 				const widget = new ElementClass({});
 				widget.className = 'rfb-place-autocomplete';
-				widget.setAttribute('aria-label', field.getAttribute('placeholder') || 'Location');
+				widget.setAttribute('aria-label', fieldPlaceholder);
+				widget.setAttribute('placeholder', fieldPlaceholder); // preserve the original placeholder
 				field.classList.add('rfb-input-is-backed');
 				field.closest('.rfb-location-field')?.classList.add('rfb-location-field-modern');
 				field.insertAdjacentElement('afterend', widget);
@@ -607,9 +612,15 @@
 					return;
 				}
 
+				// Save the placeholder before Google's library potentially clears it.
+				const savedPlaceholder = this.fields[key].getAttribute('placeholder') || '';
 				const autocomplete = new window.google.maps.places.Autocomplete(this.fields[key], {
 					fields: ['formatted_address', 'geometry', 'name'],
 				});
+				// Restore placeholder immediately after init (Google clears it on some versions).
+				if (savedPlaceholder && !this.fields[key].getAttribute('placeholder')) {
+					this.fields[key].setAttribute('placeholder', savedPlaceholder);
+				}
 				autocomplete.addListener('place_changed', () => {
 					const place = autocomplete.getPlace();
 					if (place && place.formatted_address) {
@@ -924,8 +935,8 @@
 				return false;
 			}
 
-			if (!payload.vehicleId) {
-				this.message('No configured vehicle can handle this passenger and luggage count yet.', 'error');
+			if (!payload.vehicleId && !this.state.manualDispatch) {
+				this.message('Please enter passenger and luggage counts to check available vehicles.', 'error');
 				return false;
 			}
 
@@ -991,7 +1002,7 @@
 					return;
 				}
 
-				this.showConfirmation(response.booking.bookingNumber);
+				this.showConfirmation(response.booking.bookingNumber, payload);
 			} catch (error) {
 				if (error.details?.code === 'outside_service_area') {
 					this.message(error.details.message || 'This ride is outside our service area.', 'error');
@@ -1003,7 +1014,7 @@
 			}
 		}
 
-		showConfirmation(bookingNumber) {
+		showConfirmation(bookingNumber, payload = {}) {
 			this.flowSteps.forEach((element) => element.classList.remove('is-active'));
 			this.stepDots.forEach((element) => element.classList.remove('is-active'));
 			this.root.classList.add('is-complete');
@@ -1012,8 +1023,65 @@
 				this.confirmationEl.hidden = false;
 			}
 			if (this.confirmationTextEl) {
-				this.confirmationTextEl.textContent = `Booking ${bookingNumber} was created. We will contact you if anything needs to be confirmed.`;
+				this.confirmationTextEl.textContent = `Booking ${bookingNumber} confirmed. We will contact you if anything needs to be confirmed.`;
 			}
+
+			// ── Add to Calendar ───────────────────────────────────────────────────────
+			if (this.confirmationEl && payload.pickupDate && payload.pickupTime) {
+				// Build a Date from the local pickup date + time (user-selected, no UTC offset).
+				const [year, month, day] = payload.pickupDate.split('-').map(Number);
+				const [hour, minute]     = payload.pickupTime.split(':').map(Number);
+				const startDt = new Date(year, month - 1, day, hour, minute, 0);
+				const endDt   = new Date(startDt.getTime() + 60 * 60 * 1000); // estimate 1 h
+
+				const pad2 = (n) => String(n).padStart(2, '0');
+				// Format as local YYYYMMDDTHHMMSS (no Z — local time event, not UTC).
+				const fmtLocal = (d) =>
+					`${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}T` +
+					`${pad2(d.getHours())}${pad2(d.getMinutes())}00`;
+
+				const route   = [payload.pickupAddress, payload.dropoffAddress].filter(Boolean).join(' → ');
+				const summary = `Taxi ride: ${route}`;
+				const desc    = `Booking reference: ${bookingNumber}`;
+
+				// Google Calendar link
+				const gcUrl = 'https://calendar.google.com/calendar/render?' + new URLSearchParams({
+					action: 'TEMPLATE',
+					text: summary,
+					dates: `${fmtLocal(startDt)}/${fmtLocal(endDt)}`,
+					details: desc,
+					location: payload.pickupAddress || '',
+				}).toString();
+
+				// ICS blob for Apple Calendar / Outlook / any calendar app
+				const icsLines = [
+					'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RideFleet//Booking//EN',
+					'BEGIN:VEVENT',
+					`DTSTART:${fmtLocal(startDt)}`,
+					`DTEND:${fmtLocal(endDt)}`,
+					`SUMMARY:${summary}`,
+					`DESCRIPTION:${desc}`,
+					`LOCATION:${payload.pickupAddress || ''}`,
+					`UID:${bookingNumber}@ridefleet`,
+					'END:VEVENT', 'END:VCALENDAR',
+				].join('\r\n');
+				const icsUrl = URL.createObjectURL(new Blob([icsLines], { type: 'text/calendar;charset=utf-8' }));
+
+				const calSection = document.createElement('div');
+				calSection.className = 'rfb-cal-section';
+				calSection.innerHTML =
+					'<p class="rfb-cal-label">Add to calendar</p>' +
+					'<div class="rfb-cal-links">' +
+					`<a href="${gcUrl}" target="_blank" rel="noopener noreferrer" class="rfb-cal-btn rfb-cal-google">` +
+					'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 2v4M8 2v4M3 9h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' +
+					' Google Calendar</a>' +
+					`<a href="${icsUrl}" download="booking-${bookingNumber}.ics" class="rfb-cal-btn rfb-cal-apple">` +
+					'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 2v4M8 2v4M3 9h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="14" r="1" fill="currentColor"/><circle cx="12" cy="14" r="1" fill="currentColor"/><circle cx="16" cy="14" r="1" fill="currentColor"/></svg>' +
+					' Apple / Other</a>' +
+					'</div>';
+				this.confirmationEl.appendChild(calSection);
+			}
+
 			this.message('', '');
 		}
 

@@ -11,6 +11,22 @@
 	max-width: 1560px;
 }
 
+/* ── Theme isolation for admin panels ── */
+.rfb-admin *,
+.rfb-admin *::before,
+.rfb-admin *::after {
+	box-sizing: border-box;
+}
+.rfb-admin h1,
+.rfb-admin h2,
+.rfb-admin h3 {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.rfb-admin .rfb-panel p:last-child,
+.rfb-admin .rfb-stat p:last-child {
+	margin-bottom: 0;
+}
+
 /* ── Typography ── */
 
 .rfb-kicker {
@@ -284,6 +300,7 @@
 }
 
 .rfb-badge-pending_payment,
+.rfb-badge-pending_dispatch,
 .rfb-badge-pending,
 .rfb-badge-unpaid,
 .rfb-badge-partially_paid {

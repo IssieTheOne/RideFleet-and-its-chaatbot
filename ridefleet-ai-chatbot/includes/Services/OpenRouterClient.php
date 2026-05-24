@@ -7,6 +7,7 @@
 
 namespace RideFleetAIChatbot\Services;
 
+use RideFleetAIChatbot\Support\DiagnosticLogger;
 use RideFleetAIChatbot\Support\Logger;
 use RideFleetAIChatbot\Support\Options;
 use RideFleetAIChatbot\Support\UsageMeter;
@@ -33,15 +34,18 @@ final class OpenRouterClient {
 		}
 
 		$state = sanitize_key((string) ($session['state'] ?? 'greeting'));
+		$session_id = absint($session['id'] ?? 0);
+		$session_key = sanitize_key((string) ($session['session_key'] ?? ''));
 		$data = is_array($session['collected_data'] ?? null) ? $session['collected_data'] : [];
 		$language = sanitize_key((string) ($data['language'] ?? ''));
 		$system = 'You are an intent classifier for a taxi booking chatbot. Return strict JSON only — no prose. '
-			. 'Allowed intents: smalltalk, location, confirmation, question, edit_request, cancel, time, name, phone, passenger_count, luggage_count, extras, vehicle_choice, unknown. '
+			. 'Allowed intents: smalltalk, location, confirmation, question, edit_request, cancel, new_booking, time, name, phone, passenger_count, luggage_count, flight_number, extras, vehicle_choice, unknown. '
 			. 'CRITICAL RULES for location intent: '
 			. '(1) Only use location intent when the message clearly contains a named place — an address, street, station, airport, hotel, city, or landmark. '
 			. '(2) NEVER classify a message as location if it is a question ("what", "where", "who", "why", "how", "which", "when"), a greeting, a sentence about language, a complaint, or a general statement. '
 			. '(3) If the extracted pickup or dropoff field would contain a verb phrase, question fragment, or non-place text (e.g. "talk to me", "you before", "are you done", "contact please"), set that field to null and use intent=question or intent=unknown instead. '
 			. '(4) If state is capture_dropoff, do not output a pickup field unless the user explicitly provides a full "from X to Y" route. '
+			. '(5) If state is greeting or capture_pickup, do not output a dropoff field unless the message explicitly contains directional language such as "to", "naar", "à", "going to", "drop me at", "drop off at", "vers", "jusqu\'à". A single place name with no destination language means only the pickup field should be set. '
 			. 'Extract every booking field visible in the message: pickup, dropoff, passenger_count, luggage_count, pickup_time, name, phone. Multiple fields in one message is valid and encouraged. '
 			. 'Use null for any field not clearly present. '
 			. 'JSON fields: intent, confidence (0–1), language (en/fr/nl/unknown), pickup, dropoff, pickup_time, name, phone, passenger_count, luggage_count, extras, vehicle_choice, booking_id, question_type, reply_tone (neutral/playful/urgent), admin_summary_en.';
@@ -52,39 +56,40 @@ final class OpenRouterClient {
 				'message' => $message,
 			]
 		);
+		DiagnosticLogger::log($session_id, $session_key, 'ai_request', 'openrouter_classifier', 'Classifying user turn with OpenRouter.', [
+			'model' => $this->model_for('fast'),
+			'state' => $state,
+			'locked_language' => $language ?: null,
+			'message' => $message,
+		]);
 
-		$response = wp_remote_post(
-			'https://openrouter.ai/api/v1/chat/completions',
-			[
-				'timeout' => 12,
-				'redirection' => 0,
-				'headers' => [
-					'Authorization' => 'Bearer ' . $key,
-					'Content-Type' => 'application/json',
-					'HTTP-Referer' => home_url(),
-					'X-Title' => get_bloginfo('name') . ' RideFleet AI Chatbot Intent Classifier',
-				],
-				'body' => wp_json_encode(
-					[
-						'model' => $this->model_for('fast'),
-						'messages' => [
-							['role' => 'system', 'content' => $system],
-							['role' => 'user', 'content' => (string) $user],
-						],
-						'temperature' => 0,
-						'max_tokens' => 220,
-						'response_format' => ['type' => 'json_object'],
-					]
-				),
-			]
-		);
+		$response_body = [
+			'messages' => [
+				['role' => 'system', 'content' => $system],
+				['role' => 'user', 'content' => (string) $user],
+			],
+			'temperature' => 0,
+			'max_tokens' => 220,
+			'response_format' => ['type' => 'json_object'],
+		];
 
-		$decoded = $this->decode_json_response($response);
+		$decoded = $this->post_completion($response_body, 'fast', 5, 'openrouter_classifier', $session_id, $session_key, $key, get_bloginfo('name') . ' RideFleet AI Chatbot Intent Classifier');
 		if (empty($decoded['success'])) {
+			DiagnosticLogger::log($session_id, $session_key, 'ai_response', 'openrouter_classifier', 'Classifier failed or returned unusable JSON.', [
+				'success' => false,
+				'message' => $decoded['message'] ?? '',
+				'status' => $decoded['status'] ?? null,
+			]);
 			return $decoded;
 		}
 
-		return ['success' => true, 'data' => $this->normalize_classification($decoded['data'])];
+		$normalized = $this->normalize_classification($decoded['data']);
+		DiagnosticLogger::log($session_id, $session_key, 'ai_response', 'openrouter_classifier', 'Classifier response normalized.', [
+			'success' => true,
+			'raw' => $decoded['data'],
+			'normalized' => $normalized,
+		]);
+		return ['success' => true, 'data' => $normalized];
 	}
 
 	/**
@@ -103,6 +108,8 @@ final class OpenRouterClient {
 		}
 
 		$data = is_array($session['collected_data'] ?? null) ? $session['collected_data'] : [];
+		$session_id = absint($session['id'] ?? 0);
+		$session_key = sanitize_key((string) ($session['session_key'] ?? ''));
 		$system = 'Extract every taxi booking field visible in the user message. Return strict JSON only. '
 			. 'Fields (all optional, use null if not present): '
 			. 'pickup (string — place name or address), '
@@ -124,35 +131,29 @@ final class OpenRouterClient {
 		}
 
 		$context = $already ? 'Already captured: ' . implode(', ', $already) . '. Only extract what is NEW.' : 'Nothing captured yet.';
+		DiagnosticLogger::log($session_id, $session_key, 'ai_request', 'openrouter_extractor', 'Extracting one-shot booking fields with OpenRouter.', [
+			'model' => $this->model_for('fast'),
+			'message' => $message,
+			'context' => $context,
+		]);
 
-		$response = wp_remote_post(
-			'https://openrouter.ai/api/v1/chat/completions',
-			[
-				'timeout' => 10,
-				'redirection' => 0,
-				'headers' => [
-					'Authorization' => 'Bearer ' . $key,
-					'Content-Type' => 'application/json',
-					'HTTP-Referer' => home_url(),
-					'X-Title' => get_bloginfo('name') . ' RideFleet Field Extractor',
-				],
-				'body' => wp_json_encode(
-					[
-						'model' => $this->model_for('fast'),
-						'messages' => [
-							['role' => 'system', 'content' => $system],
-							['role' => 'user', 'content' => $context . "\n\nCustomer message: " . $message],
-						],
-						'temperature' => 0,
-						'max_tokens' => 200,
-						'response_format' => ['type' => 'json_object'],
-					]
-				),
-			]
-		);
+		$response_body = [
+			'messages' => [
+				['role' => 'system', 'content' => $system],
+				['role' => 'user', 'content' => $context . "\n\nCustomer message: " . $message],
+			],
+			'temperature' => 0,
+			'max_tokens' => 200,
+			'response_format' => ['type' => 'json_object'],
+		];
 
-		$decoded = $this->decode_json_response($response);
+		$decoded = $this->post_completion($response_body, 'fast', 5, 'openrouter_extractor', $session_id, $session_key, $key, get_bloginfo('name') . ' RideFleet Field Extractor');
 		if (empty($decoded['success']) || !is_array($decoded['data'] ?? null)) {
+			DiagnosticLogger::log($session_id, $session_key, 'ai_response', 'openrouter_extractor', 'Field extractor failed or returned unusable JSON.', [
+				'success' => false,
+				'message' => $decoded['message'] ?? '',
+				'status' => $decoded['status'] ?? null,
+			]);
 			return ['success' => false];
 		}
 
@@ -171,6 +172,11 @@ final class OpenRouterClient {
 			}
 		}
 
+		DiagnosticLogger::log($session_id, $session_key, 'ai_response', 'openrouter_extractor', 'Field extractor response normalized.', [
+			'success' => true,
+			'raw' => $raw,
+			'fields' => $clean,
+		]);
 		return ['success' => true, 'fields' => $clean];
 	}
 
@@ -199,58 +205,64 @@ final class OpenRouterClient {
 		$cache_key = 'rfac_reply_' . md5($language . '|' . $message);
 		$cached = get_transient($cache_key);
 		if (is_string($cached) && '' !== $cached) {
+			DiagnosticLogger::log(absint($session['id'] ?? 0), sanitize_key((string) ($session['session_key'] ?? '')), 'ai_cache_hit', 'openrouter_localizer', 'Localized reply served from cache.', [
+				'target_language' => $language,
+				'original_message' => $message,
+				'localized_message' => $cached,
+			]);
 			return $cached;
 		}
 
 		$target = 'fr' === $language ? 'French' : 'Dutch';
+		$session_id = absint($session['id'] ?? 0);
+		$session_key = sanitize_key((string) ($session['session_key'] ?? ''));
+		DiagnosticLogger::log($session_id, $session_key, 'ai_request', 'openrouter_localizer', 'Localizing assistant reply with OpenRouter.', [
+			'model' => $this->model_for('quality'),
+			'target_language' => $language,
+			'state' => sanitize_key((string) ($session['state'] ?? '')),
+			'message' => $message,
+		]);
 		$system = 'You are a taxi booking chatbot reply localizer. Return strict JSON only with key "message". '
 			. 'Translate or lightly rewrite the assistant message into natural ' . $target . '. '
 			. 'Do not add new facts, prices, discounts, policies, locations, booking IDs, dates, phone numbers, vehicle names, or extras. '
 			. 'Preserve all amounts, codes, addresses, vehicle names, numbered lists, and the booking workflow meaning exactly. '
 			. 'Keep the tone warm and human, but concise. If the message is already in the target language, polish only obvious awkwardness.';
 
-		$response = wp_remote_post(
-			'https://openrouter.ai/api/v1/chat/completions',
-			[
-				'timeout' => 10,
-				'redirection' => 0,
-				'headers' => [
-					'Authorization' => 'Bearer ' . $key,
-					'Content-Type' => 'application/json',
-					'HTTP-Referer' => home_url(),
-					'X-Title' => get_bloginfo('name') . ' RideFleet AI Chatbot Reply Localizer',
+		$response_body = [
+			'messages' => [
+				['role' => 'system', 'content' => $system],
+				[
+					'role' => 'user',
+					'content' => wp_json_encode(
+						[
+							'target_language' => $language,
+							'state' => sanitize_key((string) ($session['state'] ?? '')),
+							'message' => $message,
+						]
+					),
 				],
-				'body' => wp_json_encode(
-					[
-						'model' => $this->model_for('quality'),
-						'messages' => [
-							['role' => 'system', 'content' => $system],
-							[
-								'role' => 'user',
-								'content' => wp_json_encode(
-									[
-										'target_language' => $language,
-										'state' => sanitize_key((string) ($session['state'] ?? '')),
-										'message' => $message,
-									]
-								),
-							],
-						],
-						'temperature' => 0.2,
-						'max_tokens' => 260,
-						'response_format' => ['type' => 'json_object'],
-					]
-				),
-			]
-		);
+			],
+			'temperature' => 0.2,
+			'max_tokens' => 260,
+			'response_format' => ['type' => 'json_object'],
+		];
 
-		$decoded = $this->decode_json_response($response);
+		$decoded = $this->post_completion($response_body, 'fast', 5, 'openrouter_localizer', $session_id, $session_key, $key, get_bloginfo('name') . ' RideFleet AI Chatbot Reply Localizer');
 		$localized = is_array($decoded['data'] ?? null) ? trim(wp_strip_all_tags((string) ($decoded['data']['message'] ?? ''))) : '';
 		if (empty($decoded['success']) || '' === $localized) {
+			DiagnosticLogger::log($session_id, $session_key, 'ai_response', 'openrouter_localizer', 'Localizer failed; original reply kept.', [
+				'success' => false,
+				'message' => $decoded['message'] ?? '',
+				'status' => $decoded['status'] ?? null,
+			]);
 			return $message;
 		}
 
 		set_transient($cache_key, $localized, DAY_IN_SECONDS);
+		DiagnosticLogger::log($session_id, $session_key, 'ai_response', 'openrouter_localizer', 'Localized reply received.', [
+			'success' => true,
+			'localized_message' => $localized,
+		]);
 		return $localized;
 	}
 
@@ -270,33 +282,17 @@ final class OpenRouterClient {
 			$instruction = 'Rewrite this taxi company bio to be concise and factual. Keep every concrete fact (services, fleet, hours, areas, policies, contact info). Remove fluff, marketing adjectives, and repetition. Use clear professional language and short sentences. Return strict JSON only with key "rewritten".';
 		}
 
-		$response = wp_remote_post(
-			'https://openrouter.ai/api/v1/chat/completions',
-			[
-				'timeout' => 30,
-				'redirection' => 0,
-				'headers' => [
-					'Authorization' => 'Bearer ' . $key,
-					'Content-Type' => 'application/json',
-					'HTTP-Referer' => home_url(),
-					'X-Title' => get_bloginfo('name') . ' RideFleet AI Chatbot Bio Rewriter',
-				],
-				'body' => wp_json_encode(
-					[
-						'model' => $this->model_for('quality'),
-						'messages' => [
-							['role' => 'system', 'content' => $instruction],
-							['role' => 'user', 'content' => $text],
-						],
-						'temperature' => 0.2,
-						'max_tokens' => 700,
-						'response_format' => ['type' => 'json_object'],
-					]
-				),
-			]
-		);
+		$response_body = [
+			'messages' => [
+				['role' => 'system', 'content' => $instruction],
+				['role' => 'user', 'content' => $text],
+			],
+			'temperature' => 0.2,
+			'max_tokens' => 700,
+			'response_format' => ['type' => 'json_object'],
+		];
 
-		$decoded = $this->decode_json_response($response);
+		$decoded = $this->post_completion($response_body, 'quality', 30, 'openrouter_rewriter', 0, '', $key, get_bloginfo('name') . ' RideFleet AI Chatbot Bio Rewriter');
 		if (empty($decoded['success'])) {
 			return $decoded;
 		}
@@ -310,6 +306,13 @@ final class OpenRouterClient {
 	}
 
 	private function model_for(string $task): string {
+		// Test-mode override: set by the E2E test suite via the rfac-test/v1 endpoints.
+		// Stored as a short-lived transient; only reachable from localhost.
+		$test_override = get_transient('rfac_test_model_override');
+		if (is_string($test_override) && '' !== $test_override) {
+			return $test_override;
+		}
+
 		$unified = trim(sanitize_text_field((string) Options::get('selected_model', '')));
 		if ('' !== $unified) {
 			return $unified; // unified model overrides everything
@@ -325,7 +328,63 @@ final class OpenRouterClient {
 				return $m;
 			}
 		}
-		return 'openai/gpt-4o-mini';
+		return 'mistralai/mistral-small-24b-instruct-2501';
+	}
+
+	private function model_candidates(string $task): array {
+		$primary = $this->model_for($task);
+		$fallbacks = [
+			'mistralai/mistral-small-24b-instruct-2501',
+			'openai/gpt-4o-mini',
+		];
+
+		return array_values(array_unique(array_filter(array_merge([$primary], $fallbacks))));
+	}
+
+	private function post_completion(array $body, string $task, int $timeout, string $source, int $session_id, string $session_key, string $key, string $title): array {
+		$last = ['success' => false, 'message' => __('The AI classifier is unavailable right now.', 'ridefleet-ai-chatbot')];
+		foreach ($this->model_candidates($task) as $index => $model) {
+			$body['model'] = $model;
+			$response = wp_remote_post(
+				'https://openrouter.ai/api/v1/chat/completions',
+				[
+					'timeout' => $timeout,
+					'redirection' => 0,
+					'headers' => [
+						'Authorization' => 'Bearer ' . $key,
+						'Content-Type' => 'application/json',
+						'HTTP-Referer' => home_url(),
+						'X-Title' => $title,
+					],
+					'body' => wp_json_encode($body),
+				]
+			);
+			$decoded = $this->decode_json_response($response);
+			if (!empty($decoded['success'])) {
+				$decoded['model'] = $model;
+				return $decoded;
+			}
+
+			$last = $decoded;
+			$status = (int) ($decoded['status'] ?? 0);
+			// Always log every failure so the diagnostic log shows the full fallback chain.
+			DiagnosticLogger::log($session_id, $session_key, 'ai_model_fallback', $source, 'OpenRouter model failed; trying fallback if available.', [
+				'failed_model' => $model,
+				'status' => $status ?: null,
+				'message' => (string) ($decoded['message'] ?? ''),
+				'next_model' => $this->model_candidates($task)[$index + 1] ?? '',
+			]);
+
+			// Retryable: timeout/WP_Error (0), bad request (400), not found (404),
+			// rate limited (429), and transient server errors (500/502/503).
+			// Any other status (e.g. 401 auth failure) is a hard stop.
+			$retryable = [0, 400, 404, 429, 500, 502, 503];
+			if (!in_array($status, $retryable, true)) {
+				return $decoded;
+			}
+		}
+
+		return $last;
 	}
 
 	public function valid_key(string $key): bool {
@@ -361,7 +420,7 @@ final class OpenRouterClient {
 	}
 
 	private function normalize_classification(array $data): array {
-		$allowed = ['smalltalk', 'location', 'confirmation', 'question', 'edit_request', 'cancel', 'time', 'name', 'phone', 'passenger_count', 'luggage_count', 'extras', 'vehicle_choice', 'unknown'];
+		$allowed = ['smalltalk', 'location', 'confirmation', 'question', 'edit_request', 'cancel', 'new_booking', 'time', 'name', 'phone', 'passenger_count', 'luggage_count', 'flight_number', 'extras', 'vehicle_choice', 'unknown'];
 		$intent = sanitize_key((string) ($data['intent'] ?? 'unknown'));
 		if (!in_array($intent, $allowed, true)) {
 			$intent = 'unknown';

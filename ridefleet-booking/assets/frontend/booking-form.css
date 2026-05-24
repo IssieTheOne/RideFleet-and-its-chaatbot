@@ -614,6 +614,20 @@
 	background: #fff7f6;
 }
 
+.rfb-auto-vehicle-dispatch {
+	border-color: rgba(180, 83, 9, .28);
+	background: linear-gradient(135deg, #fffbeb, #fff7ed);
+}
+
+.rfb-auto-vehicle-dispatch strong {
+	color: #92400e;
+}
+
+.rfb-auto-vehicle-dispatch small {
+	color: #a16207 !important;
+	font-weight: 600 !important;
+}
+
 .rfb-checkout-bar {
 	position: relative;
 	bottom: auto;
@@ -873,6 +887,51 @@
 	margin: 0;
 	color: var(--rfb-muted);
 }
+
+/* ── Add to Calendar (injected after confirmation) ── */
+.rfb-cal-section {
+	margin-top: 18px;
+	padding-top: 14px;
+	border-top: 1px solid rgba(15, 118, 110, .15);
+}
+.rfb-cal-label {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+	color: var(--rfb-muted);
+	margin: 0 0 8px;
+}
+.rfb-cal-links {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.rfb-cal-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 14px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	border: 1px solid transparent;
+	transition: background .13s, border-color .13s;
+	cursor: pointer;
+}
+.rfb-cal-google {
+	background: #f0fdf9;
+	color: #0b5f59;
+	border-color: #a7f3d0;
+}
+.rfb-cal-google:hover { background: #d1fae5; }
+.rfb-cal-apple {
+	background: #f8fafc;
+	color: #334155;
+	border-color: #e2e8f0;
+}
+.rfb-cal-apple:hover { background: #f1f5f9; }
 
 .rfb-map-shell {
 	position: sticky;

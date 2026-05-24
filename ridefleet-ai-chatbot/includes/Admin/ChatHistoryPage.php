@@ -301,6 +301,7 @@ final class ChatHistoryPage {
 
 		global $wpdb;
 		$wpdb->delete($wpdb->prefix . 'rfac_chat_messages', ['session_id' => $session_id], ['%d']);
+		$wpdb->delete($wpdb->prefix . 'rfac_diagnostic_events', ['session_id' => $session_id], ['%d']);
 		$wpdb->delete($wpdb->prefix . 'rfac_chat_sessions', ['id' => $session_id], ['%d']);
 
 		wp_safe_redirect(admin_url('admin.php?page=ridefleet-ai-chatbot-history&deleted=1'));

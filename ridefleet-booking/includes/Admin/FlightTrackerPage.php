@@ -16,7 +16,11 @@ if (!defined('ABSPATH')) {
 
 final class FlightTrackerPage {
     private const API_BASE  = 'https://airlabs.co/api/v9/schedules';
-    private const CACHE_TTL = DAY_IN_SECONDS;
+    private const CACHE_TTL = 10 * MINUTE_IN_SECONDS; // 10 min — refresh frequently for real-time accuracy
+
+    /** Exposed after dashboard_widget() runs so the caller can embed it in a combined footer. */
+    public static string $widget_fetched = '';
+    public static string $widget_iata    = '';
 
     // ── Static lookups (top 60 airlines / airports — extend as needed) ─────
     private const AIRLINES = [
@@ -158,6 +162,47 @@ final class FlightTrackerPage {
         'MEL'=>['name'=>'Melbourne Airport','city'=>'Melbourne'],
     ];
 
+    private const TIMEZONES = [
+        'BTV'=>'America/New_York','JFK'=>'America/New_York','LGA'=>'America/New_York',
+        'EWR'=>'America/New_York','BOS'=>'America/New_York','PHL'=>'America/New_York',
+        'DCA'=>'America/New_York','IAD'=>'America/New_York','BWI'=>'America/New_York',
+        'CLT'=>'America/New_York','ATL'=>'America/New_York','MCO'=>'America/New_York',
+        'MIA'=>'America/New_York','FLL'=>'America/New_York','TPA'=>'America/New_York',
+        'JAX'=>'America/New_York','ORF'=>'America/New_York','RIC'=>'America/New_York',
+        'CHS'=>'America/New_York','SAV'=>'America/New_York','ALB'=>'America/New_York',
+        'BUF'=>'America/New_York','ROC'=>'America/New_York','SYR'=>'America/New_York',
+        'PVD'=>'America/New_York','MHT'=>'America/New_York',
+        'ORD'=>'America/Chicago','MDW'=>'America/Chicago','MSP'=>'America/Chicago',
+        'DFW'=>'America/Chicago','DAL'=>'America/Chicago','IAH'=>'America/Chicago',
+        'HOU'=>'America/Chicago','DTW'=>'America/Detroit',
+        'DEN'=>'America/Denver','PHX'=>'America/Phoenix',
+        'LAS'=>'America/Los_Angeles','LAX'=>'America/Los_Angeles',
+        'SFO'=>'America/Los_Angeles','SJC'=>'America/Los_Angeles',
+        'SEA'=>'America/Los_Angeles','PDX'=>'America/Los_Angeles',
+        'YYZ'=>'America/Toronto','YUL'=>'America/Montreal',
+        'YVR'=>'America/Vancouver','YYC'=>'America/Edmonton',
+        'BRU'=>'Europe/Brussels','AMS'=>'Europe/Amsterdam',
+        'CDG'=>'Europe/Paris','ORY'=>'Europe/Paris','NCE'=>'Europe/Paris',
+        'MRS'=>'Europe/Paris','LYS'=>'Europe/Paris','TLS'=>'Europe/Paris',
+        'LHR'=>'Europe/London','LGW'=>'Europe/London','STN'=>'Europe/London',
+        'DUB'=>'Europe/Dublin','LIS'=>'Europe/Lisbon',
+        'FRA'=>'Europe/Berlin','MUC'=>'Europe/Berlin','DUS'=>'Europe/Berlin',
+        'HAM'=>'Europe/Berlin','BER'=>'Europe/Berlin','STR'=>'Europe/Berlin',
+        'VIE'=>'Europe/Vienna','ZRH'=>'Europe/Zurich','GVA'=>'Europe/Zurich',
+        'BCN'=>'Europe/Madrid','MAD'=>'Europe/Madrid',
+        'FCO'=>'Europe/Rome','MXP'=>'Europe/Rome','LIN'=>'Europe/Rome','BLQ'=>'Europe/Rome',
+        'ATH'=>'Europe/Athens','IST'=>'Europe/Istanbul','SAW'=>'Europe/Istanbul',
+        'CPH'=>'Europe/Copenhagen','ARN'=>'Europe/Stockholm','HEL'=>'Europe/Helsinki',
+        'OSL'=>'Europe/Oslo','WAW'=>'Europe/Warsaw','PRG'=>'Europe/Prague',
+        'BUD'=>'Europe/Budapest','OTP'=>'Europe/Bucharest','SOF'=>'Europe/Sofia',
+        'LUX'=>'Europe/Luxembourg',
+        'DXB'=>'Asia/Dubai','AUH'=>'Asia/Dubai','DOH'=>'Asia/Qatar','RUH'=>'Asia/Riyadh',
+        'SIN'=>'Asia/Singapore','HKG'=>'Asia/Hong_Kong',
+        'NRT'=>'Asia/Tokyo','HND'=>'Asia/Tokyo',
+        'ICN'=>'Asia/Seoul','PVG'=>'Asia/Shanghai','PEK'=>'Asia/Shanghai',
+        'SYD'=>'Australia/Sydney','MEL'=>'Australia/Melbourne',
+    ];
+
     public static function render(): void {
         if (!current_user_can('manage_options')) {
             wp_die(esc_html__('Access denied.', 'ridefleet-booking'));
@@ -174,7 +219,7 @@ final class FlightTrackerPage {
         $flights    = [];
         $error      = '';
         $last_fetch = '';
-        $cache_key  = 'rfb_flights_' . md5($iata . $type . wp_date('Ymd'));
+        $cache_key  = 'rfb_flights_' . md5($iata . $type); // TTL-based refresh, no date suffix needed
 
         if ($refresh) {
             delete_transient($cache_key);
@@ -196,7 +241,7 @@ final class FlightTrackerPage {
                     $body = json_decode((string) wp_remote_retrieve_body($resp), true);
                     if (200 === $code && is_array($body['response'] ?? null)) {
                         $flights    = $body['response'];
-                        $last_fetch = wp_date('H:i') . ' (today\'s data)';
+                        $last_fetch = wp_date('H:i:s') . ' UTC — refreshes every 10 min';
                         set_transient($cache_key, ['flights' => $flights, 'fetched' => $last_fetch], self::CACHE_TTL);
                     } else {
                         $error = (string) ($body['error']['message'] ?? sprintf('API error %d', $code));
@@ -205,7 +250,49 @@ final class FlightTrackerPage {
             }
         }
 
-        $now_ts = current_time('timestamp');
+        // Deduplicate codeshare flights: same route + scheduled time = same physical aircraft.
+        // Keep the row whose airline_iata is a known carrier, or the first row seen.
+        $seen_keys = [];
+        $unique_flights = [];
+        foreach ($flights as $f) {
+            $sched_raw = 'arr' === $type ? (string)($f['arr_time'] ?? '') : (string)($f['dep_time'] ?? '');
+            $dedup_key = strtoupper((string)($f['dep_iata'] ?? '')) . '|'
+                       . strtoupper((string)($f['arr_iata'] ?? '')) . '|'
+                       . $sched_raw;
+            if (!isset($seen_keys[$dedup_key])) {
+                $seen_keys[$dedup_key] = true;
+                $unique_flights[] = $f;
+            } else {
+                // If the already-stored row had an unknown airline but this one is known, swap it in
+                foreach ($unique_flights as &$uf) {
+                    $uk = strtoupper((string)($uf['dep_iata'] ?? '')) . '|'
+                        . strtoupper((string)($uf['arr_iata'] ?? '')) . '|'
+                        . ('arr' === $type ? (string)($uf['arr_time'] ?? '') : (string)($uf['dep_time'] ?? ''));
+                    if ($uk === $dedup_key) {
+                        $stored_code = strtoupper((string)($uf['airline_iata'] ?? ''));
+                        $new_code    = strtoupper((string)($f['airline_iata'] ?? ''));
+                        if (!isset(self::AIRLINES[$stored_code]) && isset(self::AIRLINES[$new_code])) {
+                            $uf = $f; // prefer the recognisable carrier row
+                        }
+                        break;
+                    }
+                }
+                unset($uf);
+            }
+        }
+        $flights = $unique_flights;
+
+        // Use airport-local "now" for past/upcoming classification so flights
+        // show correctly regardless of the WP site's timezone setting.
+        $now_ts = time(); // UTC epoch — flight timestamps from API are also UTC-based
+        if ($airport_tz_id) {
+            try {
+                $tz_obj = new \DateTimeZone($airport_tz_id);
+                $now_ts = (new \DateTime('now', $tz_obj))->getTimestamp();
+            } catch (\Exception $e) {
+                // fall through to time()
+            }
+        }
 
         // Classify each flight: past / active / upcoming
         foreach ($flights as &$f) {
@@ -240,6 +327,17 @@ final class FlightTrackerPage {
         }
 
         $airport_info   = self::AIRPORTS[$iata] ?? null;
+        $airport_tz_id  = self::TIMEZONES[$iata] ?? null;
+        $local_time_str = '';
+        if ($airport_tz_id && '' !== $iata) {
+            try {
+                $tz_obj         = new \DateTimeZone($airport_tz_id);
+                $dt_local       = new \DateTime('now', $tz_obj);
+                $local_time_str = $dt_local->format('g:i A') . ' (' . $dt_local->format('T') . ')';
+            } catch (\Exception $e) {
+                $local_time_str = '';
+            }
+        }
         $base_url       = admin_url('admin.php?page=ridefleet-flights');
         $refresh_nonce  = wp_create_nonce('rfb_flight_refresh');
 
@@ -263,11 +361,16 @@ final class FlightTrackerPage {
                     <?php endif; ?>
                 </h1>
                 <p>
-                    <?php esc_html_e('Real-time airport schedule data. Cached daily — use Refresh to force a new fetch.', 'ridefleet-booking'); ?>
+                    <?php esc_html_e('Real-time airport schedule data. Auto-refreshes every 10 minutes. Times shown in airport local time.', 'ridefleet-booking'); ?>
                     <?php if ($last_fetch): ?>
                         <span style="opacity:.7;font-size:12px;"> · <?php echo esc_html(sprintf(__('Last fetched: %s', 'ridefleet-booking'), $last_fetch)); ?></span>
                     <?php endif; ?>
                 </p>
+                <?php if ($local_time_str): ?>
+                <p style="margin:6px 0 0;font-size:13px;opacity:.8;">
+                    🕐 <?php echo esc_html(sprintf(__('Local time at %s: %s', 'ridefleet-booking'), $iata, $local_time_str)); ?>
+                </p>
+                <?php endif; ?>
             </div>
             <div class="rfb-hero-actions">
                 <?php if ($iata): ?>
@@ -340,6 +443,11 @@ final class FlightTrackerPage {
                     <a href="<?php echo esc_url($base_url); ?>" class="button"><?php esc_html_e('Reset', 'ridefleet-booking'); ?></a>
                 <?php endif; ?>
             </div>
+            <?php if ($iata): ?>
+            <div style="display:flex;align-items:center;gap:5px;margin-left:auto;color:#64748b;font-size:12px;align-self:flex-end;padding-bottom:6px;">
+                ↻ <?php esc_html_e('Auto-refresh in', 'ridefleet-booking'); ?> <strong id="rfb-fids-countdown" style="font-variant-numeric:tabular-nums;color:#0f766e;min-width:36px;display:inline-block;">30:00</strong>
+            </div>
+            <?php endif; ?>
         </form>
 
         <!-- Flight board -->
@@ -369,7 +477,13 @@ final class FlightTrackerPage {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($display_flights as $f):
+                        <?php
+        // Pre-build timezone object once — reused in every row.
+        $fmt_tz = null;
+        if ($airport_tz_id) {
+            try { $fmt_tz = new \DateTimeZone($airport_tz_id); } catch (\Exception $e) {}
+        }
+        foreach ($display_flights as $f):
                             $is_past      = (bool)($f['_is_past']??false);
                             $is_active    = strtolower((string)($f['status']??'')) === 'active';
                             $is_cancelled = strtolower((string)($f['status']??'')) === 'cancelled';
@@ -392,18 +506,33 @@ final class FlightTrackerPage {
                             $other_iata   = strtoupper((string)('arr'===$type ? ($f['dep_iata']??'—') : ($f['arr_iata']??'—')));
                             $other_info   = self::AIRPORTS[$other_iata] ?? null;
                             $sched_t      = 'arr'===$type ? (string)($f['arr_time']??'') : (string)($f['dep_time']??'');
-                            $sched_disp   = $sched_t ? wp_date('g:i A', strtotime($sched_t)) : '—';
-                            $delay        = (int)('arr'===$type ? ($f['arr_delayed']??0) : ($f['dep_delayed']??0));
                             $sched_ts     = $f['_ts'] ?? 0;
+                            $delay        = (int)('arr'===$type ? ($f['arr_delayed']??0) : ($f['dep_delayed']??0));
                             $gate         = (string)('arr'===$type ? ($f['arr_gate']??'') : ($f['dep_gate']??''));
+
+                            // Format times using the airport's own timezone (not the WP site timezone)
+                            $sched_disp = '—';
+                            if ($sched_ts > 0 && $fmt_tz) {
+                                $dt = new \DateTime('@' . $sched_ts);
+                                $dt->setTimezone($fmt_tz);
+                                $sched_disp = $dt->format('g:i A');
+                            } elseif ($sched_ts > 0) {
+                                $sched_disp = wp_date('g:i A', $sched_ts);
+                            }
 
                             // Actual time calculation
                             if ($sched_ts > 0 && $delay !== 0) {
                                 $actual_ts    = $sched_ts + ($delay * 60);
-                                $actual_disp  = wp_date('g:i A', $actual_ts);
+                                if ($fmt_tz) {
+                                    $dt2 = new \DateTime('@' . $actual_ts);
+                                    $dt2->setTimezone($fmt_tz);
+                                    $actual_disp = $dt2->format('g:i A');
+                                } else {
+                                    $actual_disp = wp_date('g:i A', $actual_ts);
+                                }
                                 $actual_class = $delay < 0 ? 'rfb-fids-actual--early' : 'rfb-fids-actual--late';
                             } elseif ($sched_ts > 0) {
-                                $actual_disp  = wp_date('g:i A', $sched_ts);
+                                $actual_disp  = $sched_disp; // on-time = same as scheduled
                                 $actual_class = 'rfb-fids-actual--ontime';
                             } else {
                                 $actual_disp  = '—';
@@ -464,6 +593,23 @@ final class FlightTrackerPage {
                     </tbody>
                 </table>
             </div>
+        <?php endif; ?>
+        <?php if ($iata): ?>
+        <script>
+        (function(){
+            var ms = 30 * 60 * 1000;
+            var refreshUrl = <?php echo wp_json_encode(add_query_arg(['iata'=>$iata,'type'=>$type,'refresh'=>'1','_wpnonce'=>$refresh_nonce], $base_url)); ?>;
+            var el = document.getElementById('rfb-fids-countdown');
+            var deadline = Date.now() + ms;
+            if (!el) return;
+            var iv = setInterval(function(){
+                var rem = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+                var m = Math.floor(rem/60), s = rem%60;
+                el.textContent = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+                if (rem === 0){ clearInterval(iv); window.location.href = refreshUrl; }
+            }, 1000);
+        })();
+        </script>
         <?php endif; ?>
         </div>
         <?php
@@ -535,7 +681,9 @@ final class FlightTrackerPage {
                 echo '</div>';
             }
             echo '</div>';
-            if ($fetched) echo '<p style="font-size:11px;color:#94a3b8;margin-top:10px;text-align:right;">Last updated: ' . esc_html($fetched) . ' · <a href="' . esc_url(admin_url('admin.php?page=ridefleet-flights&iata=' . $iata)) . '">View all</a></p>';
         }
+        // Expose fetched time and iata so the dashboard can embed them in a combined footer.
+        self::$widget_fetched = $fetched;
+        self::$widget_iata    = $iata;
     }
 }

@@ -55,7 +55,7 @@ final class CalendarPage {
 			<div class="rfb-stat-grid">
 				<?php DashboardPage::stat(__('This month', 'ridefleet-booking'), number_format_i18n(count($bookings)), __('Scheduled rides in the selected period.', 'ridefleet-booking')); ?>
 				<?php DashboardPage::stat(__('Confirmed', 'ridefleet-booking'), number_format_i18n((int) ($status_counts['confirmed'] ?? 0)), __('Rides ready for dispatch.', 'ridefleet-booking')); ?>
-				<?php DashboardPage::stat(__('Pending', 'ridefleet-booking'), number_format_i18n((int) ($status_counts['pending_payment'] ?? 0)), __('Bookings awaiting payment.', 'ridefleet-booking')); ?>
+				<?php DashboardPage::stat(__('Pending', 'ridefleet-booking'), number_format_i18n((int) (($status_counts['pending_payment'] ?? 0) + ($status_counts['pending_dispatch'] ?? 0))), __('Bookings awaiting payment or dispatch confirmation.', 'ridefleet-booking')); ?>
 				<?php DashboardPage::stat(__('Completed', 'ridefleet-booking'), number_format_i18n((int) ($status_counts['completed'] ?? 0)), __('Finished rides.', 'ridefleet-booking')); ?>
 			</div>
 						<form method="get" class="rfb-panel rfb-filter-bar rfb-filter-bar-labeled">
@@ -75,7 +75,7 @@ final class CalendarPage {
 					<span><?php esc_html_e('Status', 'ridefleet-booking'); ?></span>
 					<select name="status">
 						<option value=""><?php esc_html_e('All statuses', 'ridefleet-booking'); ?></option>
-						<?php foreach (['pending_payment', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'] as $status) : ?>
+						<?php foreach (['pending_payment', 'pending_dispatch', 'confirmed', 'completed', 'cancelled', 'refunded', 'failed'] as $status) : ?>
 						<option value="<?php echo esc_attr($status); ?>" <?php selected($status_filter, $status); ?>><?php echo esc_html(ucwords(str_replace('_', ' ', $status))); ?></option>
 						<?php endforeach; ?>
 					</select>

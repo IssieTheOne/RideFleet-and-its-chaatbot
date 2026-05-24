@@ -23,6 +23,7 @@ final class SessionRepository {
 
 		$sessions_table = $wpdb->prefix . 'rfac_chat_sessions';
 		$messages_table = $wpdb->prefix . 'rfac_chat_messages';
+		$diagnostics_table = $wpdb->prefix . 'rfac_diagnostic_events';
 
 		$wpdb->query(
 			$wpdb->prepare(
@@ -32,6 +33,16 @@ final class SessionRepository {
 				$cutoff
 			)
 		);
+		if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $diagnostics_table)) === $diagnostics_table) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE d FROM {$diagnostics_table} d
+					 INNER JOIN {$sessions_table} s ON d.session_id = s.id
+					 WHERE s.updated_at < %s",
+					$cutoff
+				)
+			);
+		}
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$sessions_table} WHERE updated_at < %s",
@@ -122,6 +133,16 @@ final class SessionRepository {
 	public function log_booking(?int $session_id, array $payload, array $result): void {
 		global $wpdb;
 
+		$status = 'failed';
+		if (!empty($result['success'])) {
+			$status = (!empty($payload['requires_manual_dispatch']) || !empty($result['manual_dispatch'])) ? 'pending_dispatch' : 'confirmed';
+			if (!empty($result['booking_status']) && is_string($result['booking_status'])) {
+				$status = sanitize_key($result['booking_status']);
+			} elseif (!empty($result['status']) && is_string($result['status']) && !is_numeric($result['status'])) {
+				$status = sanitize_key($result['status']);
+			}
+		}
+
 		$wpdb->insert(
 			$wpdb->prefix . 'rfac_booking_events',
 			[
@@ -134,7 +155,7 @@ final class SessionRepository {
 				'pickup_time' => sanitize_text_field((string) ($payload['pickup_time'] ?? '')),
 				'verified_price' => round((float) ($payload['final_price'] ?? 0), 2),
 				'currency' => sanitize_text_field((string) ($payload['currency'] ?? 'USD')),
-				'status' => !empty($result['success']) ? 'confirmed' : 'failed',
+				'status' => $status,
 				'created_at' => current_time('mysql'),
 			],
 			['%d', '%s', '%s', '%s', '%s', '%s', '%s', '%f', '%s', '%s', '%s']

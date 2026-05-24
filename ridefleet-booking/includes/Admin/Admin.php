@@ -36,6 +36,9 @@ final class Admin {
 		add_action('admin_post_rfb_clear_route_cache', [RouteCachePage::class, 'clear']);
 		add_action('admin_post_rfb_send_test_email', [SettingsPage::class, 'send_test_email']);
 		add_action('admin_post_rfb_save_core_rules', [CoreRulesPage::class, 'save']);
+		add_action('wp_ajax_rfb_customer_search', [BookingsPage::class, 'customer_search_ajax']);
+		add_action('wp_ajax_rfb_quote_preview', [BookingsPage::class, 'quote_preview_ajax']);
+		add_action('wp_ajax_rfb_create_cancellation_page', [CancellationPageGenerator::class, 'ajax_create']);
 		add_filter('use_block_editor_for_post_type', [self::class, 'use_classic_editor'], 10, 2);
 		add_filter('parent_file', [self::class, 'parent_file']);
 		add_filter('submenu_file', [self::class, 'submenu_file']);
@@ -165,10 +168,12 @@ final class Admin {
 			'rfb-admin',
 			'RideFleetAdmin',
 			[
-				'screen' => $hook,
+				'screen'               => $hook,
 				'dispatcherApiEnabled' => 'yes' === ($options['dispatcher_api_enabled'] ?? 'no'),
-				'dispatcherApiHasKey' => !empty($options['dispatcher_api_key']),
-				'dispatcherBaseUrl' => rest_url('ridefleet/v1/dispatcher'),
+				'dispatcherApiHasKey'  => !empty($options['dispatcher_api_key']),
+				'dispatcherBaseUrl'    => rest_url('ridefleet/v1/dispatcher'),
+				'ajaxUrl'              => admin_url('admin-ajax.php'),
+				'nonce'                => wp_create_nonce('rfb_admin_ajax'),
 			]
 		);
 		$key = Options::get('google_maps_api_key', '');

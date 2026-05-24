@@ -352,7 +352,7 @@ final class CoreBookingPricingEngine {
 				continue;
 			}
 
-			$hub_radius = (float) ($rate['hub_radius_km'] ?? 1.5);
+			$hub_radius = (float) ($rate['hub_radius_km'] ?? 3.0);
 			if (self::distance_km($pickup, ['lat' => (float) $hub['lat'], 'lng' => (float) $hub['lng']]) > $hub_radius) {
 				continue;
 			}

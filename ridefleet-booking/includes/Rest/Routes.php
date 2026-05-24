@@ -175,6 +175,16 @@ final class Routes {
 
 		register_rest_route(
 			'taxi-booking/v1',
+			'/place-details',
+			[
+				'methods' => 'GET',
+				'callback' => [self::class, 'chatbot_place_details'],
+				'permission_callback' => [self::class, 'can_chatbot_access'],
+			]
+		);
+
+		register_rest_route(
+			'taxi-booking/v1',
 			'/validate-coupon',
 			[
 				'methods' => 'POST',
@@ -446,8 +456,15 @@ final class Routes {
 			]
 		);
 
-		if (!AvailabilityService::is_available($pickup_at, (int) $payload['vehicleId'])) {
+		$requires_manual_dispatch = empty($payload['vehicleId']);
+		// Only check vehicle availability when a specific vehicle was requested.
+		if (!$requires_manual_dispatch && !AvailabilityService::is_available($pickup_at, (int) $payload['vehicleId'])) {
 			return new WP_REST_Response(['message' => __('This pickup time is not available.', 'ridefleet-booking')], 409);
+		}
+
+		if ($requires_manual_dispatch) {
+			$dispatch_note = __('⚠️ No vehicle matched the passenger/luggage count — dispatch must assign a vehicle for this booking.', 'ridefleet-booking');
+			$payload['note'] = trim($dispatch_note . ($payload['note'] ? "\n" . $payload['note'] : ''));
 		}
 
 		$route_id_booking = (int) $payload['routeId'];
@@ -456,6 +473,9 @@ final class Routes {
 		}
 		$quote = QuoteCalculator::calculate((float) $payload['distance'], (float) $payload['durationMinutes'], $payload['extras'], (int) $payload['vehicleId'], (string) $payload['couponCode'], $pickup_at, $route_id_booking, $payload['serviceType']);
 		$booking = BookingRepository::create($payload, $quote);
+		if ($requires_manual_dispatch) {
+			BookingRepository::add_meta((int) $booking['id'], '_requires_manual_dispatch', '1');
+		}
 		if ('approval_required' === ($service_area_status['status'] ?? '')) {
 			BookingRepository::add_meta((int) $booking['id'], '_approval_required', '1');
 			BookingRepository::add_meta((int) $booking['id'], '_service_area_status', $service_area_status);
@@ -810,6 +830,62 @@ final class Routes {
 			return new WP_REST_Response(['message' => __('Enter a valid pickup time.', 'ridefleet-booking')], 400);
 		}
 
+		$requires_manual_dispatch = (bool) absint($request->get_param('requires_manual_dispatch'));
+		if ($requires_manual_dispatch) {
+			// Dispatch_pending_quote path — no geocoding available, skip pricing entirely.
+			// Dispatch will call the customer and confirm fare before pickup.
+			$name_parts = preg_split('/\s+/', trim($payload['customer_name']), 2);
+			$booking_payload = [
+				'serviceType' => 'chatbot',
+				'source' => 'chatbot',
+				'transferType' => 'one_way',
+				'pickupAddress' => $payload['pickup_address'],
+				'dropoffAddress' => $payload['dropoff_address'],
+				'waypoints' => [],
+				'pickupDate' => wp_date('Y-m-d', $pickup_timestamp),
+				'pickupTime' => wp_date('H:i', $pickup_timestamp),
+				'distance' => 0,
+				'durationMinutes' => 0,
+				'passengers' => $payload['passengers'],
+				'luggage' => $payload['luggage'],
+				'vehicleId' => 0,
+				'routeId' => 0,
+				'extras' => [],
+				'couponCode' => '',
+				'customerFirstName' => $name_parts[0] ?? $payload['customer_name'],
+				'customerLastName' => $name_parts[1] ?? '',
+				'customerEmail' => '',
+				'customerPhone' => $payload['customer_phone'],
+				'status' => 'pending_dispatch',
+				'paymentStatus' => 'fare_pending',
+				'note' => __('⚠️ Manually dispatched booking — fare and vehicle to be confirmed by dispatch before pickup.', 'ridefleet-booking'),
+			];
+			$booking_quote = [
+				'currency' => Options::get('currency', 'USD'),
+				'distanceUnit' => Options::get('distance_unit', 'km'),
+				'subtotal' => 0.0,
+				'taxTotal' => 0.0,
+				'discountTotal' => 0.0,
+				'total' => 0.0,
+				'coupon' => ['valid' => false],
+				'serviceType' => 'chatbot',
+				'breakdown' => ['pricingSource' => 'manual_dispatch', 'zoneName' => '', 'addons' => []],
+			];
+			$booking = BookingRepository::create($booking_payload, $booking_quote);
+			BookingRepository::add_meta((int) $booking['id'], '_requires_manual_dispatch', '1');
+			NotificationService::booking_created((int) $booking['id']);
+			$response_body = [
+				'success' => true,
+				'booking_id' => $booking['bookingNumber'],
+				'internal_id' => (int) $booking['id'],
+				'status' => $booking['status'],
+			];
+			if (isset($cache_key)) {
+				set_transient($cache_key, $response_body, HOUR_IN_SECONDS);
+			}
+			return new WP_REST_Response($response_body, 201);
+		}
+
 		$quote_params = array_merge(self::chatbot_location_params($request), $payload);
 		$quote = CoreBookingPricingEngine::quote_from_request($quote_params);
 		if (empty($quote['success'])) {
@@ -933,16 +1009,58 @@ final class Routes {
 			return new WP_REST_Response(['success' => false, 'predictions' => [], 'message' => __('Google Maps is not configured in RideFleet.', 'ridefleet-booking')], 400);
 		}
 
+		// ── Geographic bias ──────────────────────────────────────────────────────────────
+		// Priority 1: caller-supplied coordinates (frontend passes pickup coords for dropoff)
+		// Priority 2: service area center from RideFleet settings (home region fallback)
+		$bias_lat = is_numeric($request->get_param('lat')) ? (float) $request->get_param('lat') : null;
+		$bias_lng = is_numeric($request->get_param('lng')) ? (float) $request->get_param('lng') : null;
+		$bias_radius_m = 50000; // 50 km soft bias — not a hard filter
+
+		if (null === $bias_lat || null === $bias_lng) {
+			// Fall back to the global service area centre configured in RideFleet → Settings.
+			$svc_raw = Options::get('core_rules', []);
+			$svc_area = is_array($svc_raw) ? ($svc_raw['global_service_area'] ?? []) : [];
+			if (!empty($svc_area['enabled']) && !empty($svc_area['data'])) {
+				$svc_data = json_decode((string) $svc_area['data'], true);
+				$centre_lat = isset($svc_data['center']['lat']) ? (float) $svc_data['center']['lat'] : null;
+				$centre_lng = isset($svc_data['center']['lng']) ? (float) $svc_data['center']['lng'] : null;
+				if (null !== $centre_lat && null !== $centre_lng) {
+					$bias_lat = $centre_lat;
+					$bias_lng = $centre_lng;
+					// Convert km radius → metres for the API; clamp to 50 km max for Places bias.
+					$r_km = max(5, min(200, (float) ($svc_data['radius'] ?? 50)));
+					$bias_radius_m = (int) ($r_km * 1000);
+				}
+			}
+		}
+
+		// Cache key includes location context to avoid serving results biased for a different
+		// region to a user in a different area.
+		$loc_context = (null !== $bias_lat) ? '|' . round($bias_lat, 2) . ',' . round($bias_lng, 2) : '';
+		$cache_key = 'rfb_chatbot_places_' . md5(strtolower($input) . $loc_context);
+		$cached = get_transient($cache_key);
+		if (is_array($cached)) {
+			return new WP_REST_Response($cached + ['cached' => true]);
+		}
+
+		$query_args = [
+			'input' => $input,
+			'key'   => $key,
+			'types' => 'geocode|establishment',
+		];
+		// Add soft geographic bias when we have coordinates.
+		// Using location+radius (not strictbounds) so users can still search outside the area.
+		if (null !== $bias_lat && null !== $bias_lng) {
+			$query_args['location'] = $bias_lat . ',' . $bias_lng;
+			$query_args['radius']   = $bias_radius_m;
+		}
+
 		$response = wp_remote_get(
 			add_query_arg(
-				[
-					'input' => $input,
-					'key' => $key,
-					'types' => 'geocode|establishment',
-				],
+				$query_args,
 				'https://maps.googleapis.com/maps/api/place/autocomplete/json'
 			),
-			['timeout' => 12]
+			['timeout' => 5]
 		);
 
 		if (is_wp_error($response)) {
@@ -961,12 +1079,70 @@ final class Routes {
 			];
 		}
 
-		return new WP_REST_Response(
-			[
-				'success' => true,
-				'predictions' => array_values(array_filter($predictions, static fn(array $item): bool => '' !== $item['description'])),
-			]
+		$result = [
+			'success' => true,
+			'predictions' => array_values(array_filter($predictions, static fn(array $item): bool => '' !== $item['description'])),
+		];
+		set_transient($cache_key, $result, 6 * HOUR_IN_SECONDS);
+		return new WP_REST_Response($result);
+	}
+
+	public static function chatbot_place_details(WP_REST_Request $request): WP_REST_Response {
+		if (!RateLimiter::check($request, 'chatbot_place_details', 120, MINUTE_IN_SECONDS)) {
+			return new WP_REST_Response(['message' => __('Too many place detail requests. Please wait a moment and try again.', 'ridefleet-booking')], 429);
+		}
+
+		$place_id = sanitize_text_field((string) $request->get_param('place_id'));
+		if ('' === $place_id) {
+			return new WP_REST_Response(['success' => false, 'message' => __('Place ID is required.', 'ridefleet-booking')], 400);
+		}
+
+		$key = Options::get('google_maps_api_key', '');
+		if (!$key) {
+			return new WP_REST_Response(['success' => false, 'message' => __('Google Maps is not configured in RideFleet.', 'ridefleet-booking')], 400);
+		}
+
+		$cache_key = 'rfb_chatbot_place_details_' . md5($place_id);
+		$cached = get_transient($cache_key);
+		if (is_array($cached)) {
+			return new WP_REST_Response($cached + ['cached' => true]);
+		}
+
+		$response = wp_remote_get(
+			add_query_arg(
+				[
+					'place_id' => $place_id,
+					'fields' => 'place_id,formatted_address,name,geometry,types',
+					'key' => $key,
+				],
+				'https://maps.googleapis.com/maps/api/place/details/json'
+			),
+			['timeout' => 5]
 		);
+
+		if (is_wp_error($response)) {
+			return new WP_REST_Response(['success' => false, 'message' => $response->get_error_message()], 500);
+		}
+
+		$body = json_decode((string) wp_remote_retrieve_body($response), true);
+		$result = is_array($body['result'] ?? null) ? $body['result'] : [];
+		$location = is_array($result['geometry']['location'] ?? null) ? $result['geometry']['location'] : [];
+		if (!isset($location['lat'], $location['lng'])) {
+			return new WP_REST_Response(['success' => false, 'message' => __('Place details did not include coordinates.', 'ridefleet-booking')], 404);
+		}
+
+		$place = [
+			'place_id' => sanitize_text_field((string) ($result['place_id'] ?? $place_id)),
+			'description' => sanitize_text_field((string) ($result['formatted_address'] ?? $result['name'] ?? '')),
+			'main_text' => sanitize_text_field((string) ($result['name'] ?? '')),
+			'secondary_text' => sanitize_text_field((string) ($result['formatted_address'] ?? '')),
+			'types' => array_values(array_map('sanitize_text_field', (array) ($result['types'] ?? []))),
+			'lat' => (float) $location['lat'],
+			'lng' => (float) $location['lng'],
+		];
+		$response_body = ['success' => true, 'place' => $place];
+		set_transient($cache_key, $response_body, DAY_IN_SECONDS);
+		return new WP_REST_Response($response_body);
 	}
 
 	private static function record_quote_event(WP_REST_Request $request, float $distance, int $duration_seconds, float $total): void {
@@ -1147,9 +1323,7 @@ final class Routes {
 			return new WP_REST_Response(['message' => __('Enter a valid email address.', 'ridefleet-booking')], 400);
 		}
 
-		if (!$payload['vehicleId']) {
-			return new WP_REST_Response(['message' => __('Select a vehicle before reserving.', 'ridefleet-booking')], 400);
-		}
+		// vehicleId=0 is allowed — dispatch will assign the vehicle manually
 
 		if ((float) $payload['distance'] <= 0 || (float) $payload['durationMinutes'] <= 0) {
 			return new WP_REST_Response(['message' => __('Calculate a route before reserving.', 'ridefleet-booking')], 400);
